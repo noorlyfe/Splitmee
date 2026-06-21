@@ -2,7 +2,7 @@
   "expo": {
     "name": "Nudgrr",
     "slug": "nudgrr",
-    "version": "1.0.6",
+    "version": "1.0.8",
     "orientation": "portrait",
     "scheme": "nudgrr",
     "userInterfaceStyle": "automatic",
@@ -14,7 +14,7 @@
       },
       "supportsTablet": false,
       "bundleIdentifier": "com.noorlyfe.nudgrr",
-      "buildNumber": "3",
+      "buildNumber": "1",
       "infoPlist": {
         "CFBundleLocalizations": [
           "en",
@@ -50,16 +50,10 @@
         "expo-splash-screen",
         {
           "ios": {
-            "image": "./assets/icon.png",
-            "backgroundColor": "#FFF9F0",
-            "resizeMode": "contain",
-            "imageWidth": 280
+            "backgroundColor": "#FFF9F0"
           },
           "android": {
-            "image": "./assets/icon.png",
-            "backgroundColor": "#FFF9F0",
-            "resizeMode": "contain",
-            "imageWidth": 280
+            "backgroundColor": "#FFF9F0"
           }
         }
       ],

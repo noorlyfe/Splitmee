@@ -1,6 +1,6 @@
 import "react-native-gesture-handler";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { I18nManager, Platform, StyleSheet, View } from "react-native";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -18,6 +18,7 @@ import {
 } from "../constants/purchases";
 import { useColors } from "../hooks/useColors";
 import { ThemeProvider } from "../hooks/useTheme";
+import { AnimatedSplash } from "../components/AnimatedSplash";
 import { UpdateGate } from "../components/UpdateGate";
 import { LocaleProvider, useLocale } from "../contexts/LocaleContext";
 import { AppPreferencesProvider } from "../hooks/useAppPreferences";
@@ -25,17 +26,13 @@ import { ReceiptFooterProvider } from "../hooks/useReceiptFooter";
 import { initOneSignal } from "../lib/oneSignal";
 
 SplashScreen.preventAutoHideAsync();
-SplashScreen.setOptions({ duration: 400, fade: true });
+SplashScreen.setOptions({ duration: 280, fade: true });
 
-const MIN_SPLASH_MS = 1000;
-const appStartedAt = Date.now();
+const SPLASH_BACKGROUND = "#FFF9F0";
 
 if (Platform.OS !== "web") {
   void initOneSignal();
 }
-
-/** Matches splash screen — frame-perfect handoff from native splash */
-const SPLASH_BACKGROUND = "#FFF9F0";
 
 function AppShell({ fontsLoaded }: { fontsLoaded: boolean }) {
   const colors = useColors();
@@ -86,6 +83,7 @@ function AppShell({ fontsLoaded }: { fontsLoaded: boolean }) {
 }
 
 export default function RootLayout() {
+  const [showSplash, setShowSplash] = useState(Platform.OS !== "web");
   const [fontsLoaded] = useFonts({
     SpaceMono_400Regular: require("../assets/fonts/SpaceMono_400Regular.ttf"),
     Inter_400Regular,
@@ -115,33 +113,38 @@ export default function RootLayout() {
     })();
   }, []);
 
-  useEffect(() => {
-    if (!fontsLoaded) {
-      return;
-    }
-
-    const remaining = Math.max(0, MIN_SPLASH_MS - (Date.now() - appStartedAt));
-    const timer = setTimeout(() => {
-      void SplashScreen.hideAsync();
-    }, remaining);
-
-    return () => clearTimeout(timer);
-  }, [fontsLoaded]);
-
   return (
-    <ThemeProvider>
-      <AppPreferencesProvider>
-        <ReceiptFooterProvider>
-          <LocaleProvider>
-            <UpdateGate>
-              <AppShell fontsLoaded={fontsLoaded} />
-            </UpdateGate>
-          </LocaleProvider>
-        </ReceiptFooterProvider>
-      </AppPreferencesProvider>
-    </ThemeProvider>
+    <View style={styles.shell}>
+      <ThemeProvider>
+        <AppPreferencesProvider>
+          <ReceiptFooterProvider>
+            <LocaleProvider>
+              <UpdateGate>
+                <AppShell fontsLoaded={fontsLoaded} />
+              </UpdateGate>
+            </LocaleProvider>
+          </ReceiptFooterProvider>
+        </AppPreferencesProvider>
+      </ThemeProvider>
+      {showSplash ? (
+        <AnimatedSplash
+          fontsLoaded={fontsLoaded}
+          onReady={() => {
+            void SplashScreen.hideAsync();
+          }}
+          onFinish={() => setShowSplash(false)}
+        />
+      ) : null}
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  shell: {
+    flex: 1,
+    backgroundColor: SPLASH_BACKGROUND,
+  },
+});
 
 function createStyles() {
   return StyleSheet.create({

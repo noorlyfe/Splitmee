@@ -1,4 +1,4 @@
-/** Shared splash typography — keep in sync with scripts/generate-splash.mjs and BootOverlay. */
+/** Shared splash typography — keep in sync with AnimatedSplash and scripts/generate-splash.mjs. */
 module.exports = {
   designWidth: 1242,
   wordmarkSize: 112,

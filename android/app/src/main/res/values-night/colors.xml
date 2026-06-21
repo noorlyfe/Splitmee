@@ -1,1 +1,4 @@
-<resources/>
+<resources>
+  <color name="splashscreen_background">#FFF9F0</color>
+  <color name="iconBackground">#FFF9F0</color>
+</resources>
