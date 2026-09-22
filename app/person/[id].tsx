@@ -11,8 +11,9 @@ import { Pressable } from "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
 import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import * as Haptics from "expo-haptics";
+import * as Haptics from "../../lib/appHaptics";
 
+import { AppAlert } from "../../components/AppAlert";
 import { fonts, radii, spacing, touchTarget, typography, type AppColors } from "../../constants/theme";
 import { useAppPreferences } from "../../hooks/useAppPreferences";
 import { useColors } from "../../hooks/useColors";
@@ -22,9 +23,10 @@ import { useSplitHistory } from "../../hooks/useSplitHistory";
 import { useProjects } from "../../hooks/useProjects";
 import { useTheme } from "../../hooks/useTheme";
 import { formatCurrency } from "../../lib/currency";
+import { MoneyByCurrency } from "../../components/MoneyByCurrency";
 import {
   daysOutstanding,
-  getPersonOutstandingAmount,
+  getPersonOutstandingByCurrency,
   getPersonWaitingRows,
   type PersonWaitingRow,
 } from "../../lib/personWaitingEntries";
@@ -42,12 +44,13 @@ export default function PersonDetailScreen() {
   const { id: rawId } = useLocalSearchParams<{ id?: string | string[] }>();
   const personId = Array.isArray(rawId) ? rawId[0] : rawId;
 
-  const { getById } = usePeople();
+  const { getById, deletePerson } = usePeople();
   const { items, reload: reloadSplits } = useSplitHistory();
   const { projects, reload: reloadProjects } = useProjects();
 
   const [person, setPerson] = useState<Person | null>(null);
   const [loadingPerson, setLoadingPerson] = useState(true);
+  const [showDeleteAlert, setShowDeleteAlert] = useState(false);
 
   const loadPerson = useCallback(async () => {
     if (!personId) {
@@ -73,9 +76,9 @@ export default function PersonDetailScreen() {
 
   const outstanding = useMemo(() => {
     if (!person) {
-      return 0;
+      return null;
     }
-    return getPersonOutstandingAmount(person.name, items, projects, currency);
+    return getPersonOutstandingByCurrency(person.name, items, projects, currency);
   }, [currency, items, person, projects]);
 
   const entries = useMemo(() => {
@@ -115,6 +118,18 @@ export default function PersonDetailScreen() {
     },
     [person, router]
   );
+
+  const confirmDelete = useCallback(async () => {
+    if (!person) {
+      return;
+    }
+    setShowDeleteAlert(false);
+    const ok = await deletePerson(person.id);
+    if (ok) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      safeRouterBack(router);
+    }
+  }, [deletePerson, person, router]);
 
   const renderEntry = useCallback(
     ({ item }: { item: PersonWaitingRow }) => {
@@ -177,12 +192,35 @@ export default function PersonDetailScreen() {
         >
           <Text style={styles.backButtonText}>{t("back")}</Text>
         </Pressable>
+        <Pressable
+          onPress={() => {
+            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            setShowDeleteAlert(true);
+          }}
+          style={styles.deleteButton}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t("delete")}
+        >
+          <Text style={styles.deleteButtonText}>{t("delete")}</Text>
+        </Pressable>
       </View>
 
       <View style={styles.hero}>
         <Text style={styles.personName}>{person.name}</Text>
         <Text style={styles.outstandingLabel}>{t("totalOutstanding")}</Text>
-        <Text style={styles.outstandingAmount}>{formatCurrency(outstanding, currency)}</Text>
+        <MoneyByCurrency
+          amounts={
+            outstanding ?? {
+              lines: [],
+              mixed: false,
+              single: { currency, amount: 0 },
+            }
+          }
+          size={outstanding?.mixed ? "body" : "hero"}
+          align="center"
+          color={colors.textPrimary}
+        />
 
         <View style={[styles.actions, rtlRow(isRTL)]}>
           <Pressable
@@ -214,6 +252,17 @@ export default function PersonDetailScreen() {
           ItemSeparatorComponent={() => <View style={styles.separator} />}
         />
       )}
+
+      <AppAlert
+        visible={showDeleteAlert}
+        title={t("personDeleteConfirmTitle")}
+        message={t("personDeleteConfirmBody", { name: person.name })}
+        buttons={[
+          { text: t("cancel"), style: "cancel", onPress: () => setShowDeleteAlert(false) },
+          { text: t("delete"), style: "destructive", onPress: () => void confirmDelete() },
+        ]}
+        onRequestClose={() => setShowDeleteAlert(false)}
+      />
     </View>
   );
 }
@@ -256,6 +305,9 @@ function createStyles(colors: AppColors, isDark: boolean) {
       fontFamily: fonts.bodySemiBold,
     },
     header: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
       paddingHorizontal: spacing.lg,
       paddingTop: spacing.sm,
       paddingBottom: spacing.xs,
@@ -267,6 +319,16 @@ function createStyles(colors: AppColors, isDark: boolean) {
     backButtonText: {
       ...typography.body,
       color: colors.accent,
+      fontFamily: fonts.bodySemiBold,
+    },
+    deleteButton: {
+      minHeight: touchTarget.min,
+      justifyContent: "center",
+      paddingHorizontal: spacing.xs,
+    },
+    deleteButtonText: {
+      ...typography.body,
+      color: colors.destructive,
       fontFamily: fonts.bodySemiBold,
     },
     hero: {
@@ -337,7 +399,7 @@ function createStyles(colors: AppColors, isDark: boolean) {
       borderRadius: radii.xl,
       backgroundColor: colors.surface,
       borderWidth: 1.5,
-      borderColor: isDark ? colors.border : "rgba(237, 228, 216, 0.95)",
+      borderColor: colors.border,
       padding: spacing.md,
       gap: spacing.sm,
       ...cardShadow,

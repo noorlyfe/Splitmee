@@ -2,11 +2,18 @@ import { useCallback, useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import type { NudgeTone } from "../constants/messages";
+import type { ReceiptTemplateId } from "../constants/receiptTemplates";
+import type { SplitCategoryId } from "../lib/categories";
 
 const STORAGE_KEY = "@nudgrr/split_history_v1";
 
 /** `split` = bill split; `project` = mirrored project settlement (optional). */
 export type WaitingEntrySource = "split" | "project";
+
+export type SplitShareLine = {
+  name: string;
+  amount: number;
+};
 
 export type SplitRecord = {
   id: string;
@@ -27,6 +34,8 @@ export type SplitRecord = {
   currency?: string;
   /** Receipt tone when saved (older records may omit → default in UI). */
   nudgeTone?: NudgeTone;
+  /** Visual template when saved (older records may omit → default). */
+  receiptTemplateId?: ReceiptTemplateId;
   /** Footer line exactly as shown on the receipt image when saved. */
   receiptFooterResolved?: string;
   /** Nudge preview text exactly as shown on the receipt image when saved. */
@@ -37,6 +46,10 @@ export type SplitRecord = {
   nudgeSentAt?: string;
   /** Links this waiting entry to a person in the People tab. */
   linkedPersonName?: string;
+  /** Spend category (food, travel, …). */
+  category?: SplitCategoryId | string;
+  /** When set, unequal shares: amounts should sum to totalAmount. */
+  shares?: SplitShareLine[];
 };
 
 async function readAll(): Promise<SplitRecord[]> {
@@ -89,9 +102,12 @@ export function useSplitHistory() {
       totalAmount: number;
       currency: string;
       nudgeTone: NudgeTone;
+      receiptTemplateId?: ReceiptTemplateId;
       receiptFooterResolved: string;
       nudgePreviewText: string;
       linkedPersonName?: string;
+      category?: string;
+      shares?: SplitShareLine[];
     }) => {
       const now = new Date().toISOString();
       const next: SplitRecord = {
@@ -107,13 +123,16 @@ export function useSplitHistory() {
         totalAmount: record.totalAmount,
         currency: record.currency,
         nudgeTone: record.nudgeTone,
+        receiptTemplateId: record.receiptTemplateId,
         receiptFooterResolved: record.receiptFooterResolved,
         nudgePreviewText: record.nudgePreviewText,
         nudgeSentAt: now,
         linkedPersonName: record.linkedPersonName?.trim() || undefined,
+        category: record.category,
+        shares: record.shares,
       };
       const all = await readAll();
-      const merged = [next, ...all].slice(0, 200);
+      const merged = [next, ...all].slice(0, 500);
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
       await reload();
       return next;

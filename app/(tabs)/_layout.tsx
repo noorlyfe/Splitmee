@@ -29,6 +29,12 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="damage"
+        options={{
+          title: "The Damage",
+        }}
+      />
+      <Tabs.Screen
         name="people"
         options={{
           title: "People",

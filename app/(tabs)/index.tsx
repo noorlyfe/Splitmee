@@ -16,7 +16,7 @@ import {
 } from "react-native";
 import { Pressable, ScrollView } from "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
-import * as Haptics from "expo-haptics";
+import * as Haptics from "../../lib/appHaptics";
 import * as Sharing from "expo-sharing";
 import { shareReceiptImage } from "../../lib/shareReceiptImage";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -26,19 +26,31 @@ import ViewShot, { captureRef } from "react-native-view-shot";
 
 import { AppAlert } from "../../components/AppAlert";
 import { BillInput } from "../../components/BillInput";
+import { CategoryChips } from "../../components/CategoryChips";
+import { FxBillRow } from "../../components/FxBillRow";
+import { ItemizedEditor, type SplitMode } from "../../components/ItemizedEditor";
 import { PeopleStepper } from "../../components/PeopleStepper";
 import { ReceiptCard, receiptCaptureOuterWidth } from "../../components/ReceiptCard";
+import { ReceiptTemplatePicker } from "../../components/ReceiptTemplatePicker";
 import { ResultCard } from "../../components/ResultCard";
 import { NudgeSection } from "../../components/NudgeSection";
+import { ShareAssigner } from "../../components/ShareAssigner";
 import { ShareReceiptButton } from "../../components/ShareReceiptButton";
 import { TipSection } from "../../components/TipSection";
+import { Ionicons } from "@expo/vector-icons";
 import { FREE_NUDGES_PER_MONTH, type NudgeTone } from "../../constants/messages";
+import {
+  DEFAULT_RECEIPT_TEMPLATE,
+  resolveReceiptTemplateId,
+  type ReceiptTemplateId,
+} from "../../constants/receiptTemplates";
 import { fonts, radii, spacing, touchTarget, typography, type AppColors } from "../../constants/theme";
 import { useLocale } from "../../hooks/useLocale";
 import { formatDateMedium } from "../../lib/i18n";
 import { useTheme } from "../../hooks/useTheme";
 import { useColors } from "../../hooks/useColors";
 import { useNudgeQuota } from "../../hooks/useNudgeQuota";
+import { useSplitQuota, FREE_SPLITS_PER_DAY } from "../../hooks/useSplitQuota";
 import { useProStatus } from "../../hooks/useProStatus";
 import { useAppPreferences } from "../../hooks/useAppPreferences";
 import { useReceiptFooter } from "../../hooks/useReceiptFooter";
@@ -54,6 +66,24 @@ import {
   getCurrencyFractionDigits,
   getCurrencyNarrowSymbol,
 } from "../../lib/currency";
+import type { SplitCategoryId } from "../../lib/categories";
+import {
+  makeEvenShares,
+  redistributeShares,
+  sharesBalanced,
+  type ShareLine,
+} from "../../lib/customShares";
+import { convertAmount } from "../../lib/fx";
+import {
+  computeItemizedSplit,
+  computePercentSplit,
+  createItemizedPeople,
+  percentSum,
+  type BillItem,
+  type ItemizedPerson,
+} from "../../lib/itemized";
+import { useFxRates } from "../../hooks/useFxRates";
+import { logActivity } from "../../hooks/useActivityFeed";
 import {
   computeReceiptPreviewLayout,
   getReceiptCaptureExportWidth,
@@ -85,8 +115,18 @@ export default function Index() {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { isPro } = useProStatus();
   const { canSendFree, recordSend, usedThisMonth } = useNudgeQuota(isPro);
-  const { loaded: prefsLoaded, defaultTone, setDefaultTone, currency, reload, hideReceiptBranding } =
-  useAppPreferences();
+  const { canSaveFree, recordSplit, remainingFree: remainingSplitsFree } = useSplitQuota(isPro);
+  const {
+    loaded: prefsLoaded,
+    defaultTone,
+    setDefaultTone,
+    defaultTemplateId,
+    setDefaultTemplateId,
+    currency,
+    reload,
+    hideReceiptBranding,
+  } = useAppPreferences();
+  const { rates: fxRates } = useFxRates();
   const { footerForReceipt } = useReceiptFooter();
   const receiptFooterText = footerForReceipt(isPro);
   const { addSplit } = useSplitHistory();
@@ -106,8 +146,22 @@ export default function Index() {
   );
   const [sharing, setSharing] = useState(false);
   const [nudgeTone, setNudgeTone] = useState<NudgeTone>("funny");
+  const [receiptTemplateId, setReceiptTemplateId] = useState<ReceiptTemplateId>(DEFAULT_RECEIPT_TEMPLATE);
   const [nudgePreviewText, setNudgePreviewText] = useState("");
   const [showQuotaModal, setShowQuotaModal] = useState(false);
+  const [showSplitQuotaModal, setShowSplitQuotaModal] = useState(false);
+  const [showCustomSharesProAlert, setShowCustomSharesProAlert] = useState(false);
+  const [showTemplateProAlert, setShowTemplateProAlert] = useState(false);
+  const [category, setCategory] = useState<SplitCategoryId>("food");
+  const [customSharesOn, setCustomSharesOn] = useState(false);
+  const [shareLines, setShareLines] = useState<ShareLine[]>([]);
+  const [splitMode, setSplitMode] = useState<SplitMode>("even");
+  const [billItems, setBillItems] = useState<BillItem[]>([]);
+  const [itemPeople, setItemPeople] = useState<ItemizedPerson[]>(() =>
+    createItemizedPeople(2, "P")
+  );
+  const [percents, setPercents] = useState<Record<string, number>>({});
+  const [billCurrency, setBillCurrency] = useState(currency);
   const [showWebPreviewSharingAlert, setShowWebPreviewSharingAlert] = useState(false);
   const [showSharingUnavailableAlert, setShowSharingUnavailableAlert] = useState(false);
   const [shareFailedMessage, setShareFailedMessage] = useState<string | null>(null);
@@ -133,10 +187,20 @@ export default function Index() {
     }, [personName, reload])
   );
 
-  const billAmount = useMemo(() => {
+  const billAmountRaw = useMemo(() => {
     const n = parseFloat(billDigits);
     return Number.isFinite(n) ? n : null;
   }, [billDigits]);
+
+  const billAmount = useMemo(() => {
+    if (billAmountRaw == null) {
+      return null;
+    }
+    if (billCurrency === currency) {
+      return billAmountRaw;
+    }
+    return convertAmount(billAmountRaw, billCurrency, currency, fxRates);
+  }, [billAmountRaw, billCurrency, currency, fxRates]);
 
   const resolvedTipPercent = useMemo(() => {
     if (!isCustomTip) {
@@ -159,10 +223,116 @@ export default function Index() {
     [billAmount, effectiveTipPercent, people]
   );
 
+  useEffect(() => {
+    setItemPeople((prev) => {
+      if (prev.length === people) {
+        return prev;
+      }
+      const next = createItemizedPeople(people, t("sharePersonPrefix"));
+      return next.map((p, i) => ({ ...p, name: prev[i]?.name ?? p.name }));
+    });
+    setPercents((prev) => {
+      const nextPeople = createItemizedPeople(people, t("sharePersonPrefix"));
+      const even = Math.round((100 / Math.max(1, people)) * 100) / 100;
+      const out: Record<string, number> = {};
+      nextPeople.forEach((p, i) => {
+        out[p.id] = prev[`p-${i}`] ?? even;
+      });
+      return out;
+    });
+  }, [people, t]);
+
+  useEffect(() => {
+    setBillCurrency(currency);
+  }, [currency]);
+
+  const itemizedResult = useMemo(
+    () => computeItemizedSplit(billItems, itemPeople, split.tipAmount),
+    [billItems, itemPeople, split.tipAmount]
+  );
+
+  const percentPeople = useMemo(
+    () =>
+      itemPeople.map((p) => ({
+        ...p,
+        percent: percents[p.id] ?? Math.round((100 / Math.max(1, people)) * 100) / 100,
+      })),
+    [itemPeople, people, percents]
+  );
+
+  const percentOk = Math.abs(percentSum(percentPeople) - 100) <= 0.5;
+  const percentTotals = useMemo(
+    () => computePercentSplit(percentPeople, split.totalAmount),
+    [percentPeople, split.totalAmount]
+  );
+
+  const advancedSplitReady =
+    splitMode === "even" ||
+    (splitMode === "items" && billItems.some((it) => it.amount > 0)) ||
+    (splitMode === "percent" && percentOk);
+
+  const sharesBalancedOk = useMemo(
+    () => !customSharesOn || sharesBalanced(shareLines, split.totalAmount),
+    [customSharesOn, shareLines, split.totalAmount]
+  );
+
+  const nudgeAmount = useMemo(() => {
+    if (splitMode === "items") {
+      const linked = linkedPersonName.trim().toLowerCase();
+      const match = linked
+        ? itemPeople.find((p) => p.name.trim().toLowerCase() === linked)
+        : itemPeople[0];
+      return match ? itemizedResult.grandPerPerson[match.id] ?? split.totalPerPerson : split.totalPerPerson;
+    }
+    if (splitMode === "percent") {
+      const linked = linkedPersonName.trim().toLowerCase();
+      const match = linked
+        ? itemPeople.find((p) => p.name.trim().toLowerCase() === linked)
+        : itemPeople[0];
+      return match ? percentTotals[match.id] ?? split.totalPerPerson : split.totalPerPerson;
+    }
+    if (customSharesOn && shareLines.length > 0) {
+      const linked = linkedPersonName.trim().toLowerCase();
+      const match = linked
+        ? shareLines.find((l) => l.name.trim().toLowerCase() === linked)
+        : null;
+      return match?.amount ?? shareLines[0]?.amount ?? split.totalPerPerson;
+    }
+    return split.totalPerPerson;
+  }, [
+    customSharesOn,
+    itemPeople,
+    itemizedResult.grandPerPerson,
+    linkedPersonName,
+    percentTotals,
+    shareLines,
+    split.totalPerPerson,
+    splitMode,
+  ]);
+
+  useEffect(() => {
+    if (!split.hasBill || split.totalAmount <= 0) {
+      return;
+    }
+    setShareLines((prev) => {
+      if (!customSharesOn) {
+        return makeEvenShares(people, split.totalAmount, t("sharePersonPrefix"));
+      }
+      if (prev.length !== people) {
+        const next = makeEvenShares(people, split.totalAmount, t("sharePersonPrefix"));
+        if (linkedPersonName.trim()) {
+          next[0] = { ...next[0]!, name: linkedPersonName.trim() };
+        }
+        return next;
+      }
+      return redistributeShares(prev, split.totalAmount);
+    });
+  }, [customSharesOn, linkedPersonName, people, split.hasBill, split.totalAmount, t]);
+
   const receiptWidth = getReceiptCaptureWidth(windowWidth);
   const receiptOuterWidth = useMemo(
-    () => receiptCaptureOuterWidth(receiptWidth, nudgeTone, { zigzagHorizontalOnly: true }),
-    [receiptWidth, nudgeTone]
+    () => receiptCaptureOuterWidth(receiptWidth),
+    [receiptWidth]
   );
 
   const sharePreviewChromeHeight = insets.top + insets.bottom + 200;
@@ -207,6 +377,13 @@ export default function Index() {
     }
     setNudgeTone(defaultTone);
   }, [defaultTone, prefsLoaded]);
+
+  useEffect(() => {
+    if (!prefsLoaded) {
+      return;
+    }
+    setReceiptTemplateId(resolveReceiptTemplateId(defaultTemplateId, isPro));
+  }, [defaultTemplateId, isPro, prefsLoaded]);
 
   useEffect(() => {
     if (!prefsLoaded) {
@@ -266,6 +443,19 @@ export default function Index() {
     [setDefaultTone]
   );
 
+  const handleTemplateChange = useCallback(
+    (id: ReceiptTemplateId) => {
+      setReceiptTemplateId(id);
+      void setDefaultTemplateId(id);
+    },
+    [setDefaultTemplateId]
+  );
+
+  const activeTemplateId = useMemo(
+    () => resolveReceiptTemplateId(receiptTemplateId, isPro),
+    [isPro, receiptTemplateId]
+  );
+
   const dismissSharePreview = useCallback(() => {
     setSharePreviewUri(null);
   }, []);
@@ -291,9 +481,9 @@ export default function Index() {
     [receiptOuterWidth]
   );
 
-  /** Share Receipt only — runs immediately before the native share sheet is shown. */
+  /** Share Receipt only: runs immediately before the native share sheet is shown. */
   const countNudgeWhenShareSheetPresented = useCallback(async () => {
-    // ===== NUDGE COUNT (Share Receipt): increment when share sheet is presented — do not move or duplicate =====
+    // ===== NUDGE COUNT (Share Receipt): increment when share sheet is presented: do not move or duplicate =====
     void trackNudgeSent(isPro, locale);
     if (!isPro) {
       await recordSend();
@@ -329,6 +519,19 @@ export default function Index() {
     if (!split.hasBill) {
       return;
     }
+    if (customSharesOn && !sharesBalancedOk) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
+    if (!advancedSplitReady) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
+    if (!isPro && !canSaveFree) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      setShowSplitQuotaModal(true);
+      return;
+    }
     if (!isPro && !canSendFree) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       setShowQuotaModal(true);
@@ -344,15 +547,26 @@ export default function Index() {
           tipPercent: split.tipPercent,
           people: split.people,
           tipPerPerson: split.tipPerPerson,
-          totalPerPerson: split.totalPerPerson,
+          totalPerPerson: nudgeAmount,
           tipAmount: split.tipAmount,
           totalAmount: split.totalAmount,
           currency,
           nudgeTone,
+          receiptTemplateId: activeTemplateId,
           receiptFooterResolved,
           nudgePreviewText,
           linkedPersonName: linkedPersonName || undefined,
+          category,
+          shares: customSharesOn
+            ? shareLines.map((l) => ({ name: l.name.trim() || t("sharePersonPrefix"), amount: l.amount }))
+            : undefined,
         });
+        await recordSplit();
+        void logActivity(
+          "split_saved",
+          restaurant.trim() || t("dinner"),
+          `${nudgeAmount} ${currency}`
+        );
       } catch {
         // History is best-effort; still share the receipt.
       }
@@ -366,10 +580,6 @@ export default function Index() {
       if (!previewUri) {
         throw new Error(t("couldNotCapture"));
       }
-      if (__DEV__) {
-        console.log("[Nudgrr] Receipt PNG path:", previewUri);
-      }
-
       const canShare = await Sharing.isAvailableAsync();
       if (!canShare) {
         setShowSharingUnavailableAlert(true);
@@ -401,16 +611,25 @@ export default function Index() {
   }, [
     addSplit,
     billAmount,
+    canSaveFree,
     canSendFree,
     captureSplitReceiptPng,
+    category,
     countNudgeWhenShareSheetPresented,
-    receiptFooterText,
+    currency,
+    customSharesOn,
     isPro,
     linkedPersonName,
-    nudgeTone,
+    locale,
+    nudgeAmount,
     nudgePreviewText,
-    receiptOuterWidth,
+    nudgeTone,
+    activeTemplateId,
+    receiptFooterText,
+    recordSplit,
     restaurant,
+    shareLines,
+    sharesBalancedOk,
     split.hasBill,
     split.people,
     split.tipAmount,
@@ -418,8 +637,6 @@ export default function Index() {
     split.tipPerPerson,
     split.totalAmount,
     split.totalPerPerson,
-    currency,
-    locale,
     t,
   ]);
 
@@ -459,11 +676,10 @@ export default function Index() {
                 accessibilityRole="button"
                 accessibilityLabel={t("settings")}
               >
-                <Text style={styles.settingsEmoji}>⚙️</Text>
+                <Ionicons name="settings-outline" size={22} color={colors.textSecondary} />
               </Pressable>
               <View style={styles.headerCenter}>
-                <Text style={styles.wordmark}>Nudgrr</Text>
-                <View style={styles.wordmarkAccent} />
+                <Text style={styles.wordmark}>{t("split")}</Text>
               </View>
               <View style={styles.topRowBtn} />
             </View>
@@ -490,10 +706,18 @@ export default function Index() {
               <BillInput
                 billDigits={billDigits}
                 onBillDigitsChange={setBillDigits}
-                currencyCode={currency}
-                fractionDigits={fractionDigits}
-                symbol={currencySymbol}
+                currencyCode={billCurrency}
+                fractionDigits={getCurrencyFractionDigits(billCurrency)}
+                symbol={getCurrencyNarrowSymbol(billCurrency)}
                 variant="hero"
+              />
+
+              <FxBillRow
+                appCurrency={currency}
+                billCurrency={billCurrency}
+                onBillCurrencyChange={setBillCurrency}
+                rates={fxRates}
+                billAmount={billAmountRaw}
               />
 
               <TipSection
@@ -510,6 +734,62 @@ export default function Index() {
               <View style={styles.heroDivider} />
 
               <PeopleStepper people={people} onChange={setPeople} variant="inline" />
+
+              <CategoryChips value={category} onChange={setCategory} />
+
+              {split.hasBill ? (
+                <ItemizedEditor
+                  mode={splitMode}
+                  onModeChange={(m) => {
+                    setSplitMode(m);
+                    if (m !== "even") {
+                      setCustomSharesOn(false);
+                    }
+                  }}
+                  people={itemPeople}
+                  onChangePersonName={(id, name) =>
+                    setItemPeople((prev) => prev.map((p) => (p.id === id ? { ...p, name } : p)))
+                  }
+                  items={billItems}
+                  onChangeItems={setBillItems}
+                  percents={percents}
+                  onChangePercent={(id, percent) =>
+                    setPercents((prev) => ({ ...prev, [id]: percent }))
+                  }
+                  tipAmount={split.tipAmount}
+                  totalWithTip={split.totalAmount}
+                  currencyCode={currency}
+                  isPro={isPro}
+                  onRequirePro={() => setShowCustomSharesProAlert(true)}
+                />
+              ) : null}
+
+              {split.hasBill && splitMode === "even" ? (
+                <ShareAssigner
+                  enabled={customSharesOn}
+                  onEnabledChange={setCustomSharesOn}
+                  lines={shareLines}
+                  onChangeLine={(id, patch) => {
+                    setShareLines((prev) =>
+                      prev.map((l) => (l.id === id ? { ...l, ...patch } : l))
+                    );
+                  }}
+                  totalAmount={split.totalAmount}
+                  currencyCode={currency}
+                  isPro={isPro}
+                  onRequirePro={() => setShowCustomSharesProAlert(true)}
+                  balanced={sharesBalancedOk}
+                />
+              ) : null}
+
+              {!isPro ? (
+                <Text style={styles.quotaHint}>
+                  {t("freeSplitsRemaining", {
+                    remaining: remainingSplitsFree,
+                    total: FREE_SPLITS_PER_DAY,
+                  })}
+                </Text>
+              ) : null}
             </View>
 
             {split.hasBill ? (
@@ -521,7 +801,7 @@ export default function Index() {
                 <ResultCard
                   hasBill={split.hasBill}
                   tipPerPerson={split.tipPerPerson}
-                  totalPerPerson={split.totalPerPerson}
+                  totalPerPerson={nudgeAmount}
                   totalTip={split.tipAmount}
                   people={split.people}
                   tipPercent={split.tipPercent}
@@ -530,7 +810,7 @@ export default function Index() {
 
                 <NudgeSection
                   hasBill={split.hasBill}
-                  totalPerPerson={split.totalPerPerson}
+                  totalPerPerson={nudgeAmount}
                   restaurant={restaurant}
                   isPro={isPro}
                   tone={nudgeTone}
@@ -539,11 +819,27 @@ export default function Index() {
                   onPreviewTextChange={setNudgePreviewText}
                 />
 
+                <ReceiptTemplatePicker
+                  value={activeTemplateId}
+                  onChange={handleTemplateChange}
+                  isPro={isPro}
+                  onRequirePro={() => setShowTemplateProAlert(true)}
+                />
+
                 <View style={styles.shareCtaWrap}>
                   <ShareReceiptButton
-                    ready={split.hasBill}
+                    ready={
+                      split.hasBill &&
+                      advancedSplitReady &&
+                      (!customSharesOn || sharesBalancedOk)
+                    }
                     onPress={handleShareReceipt}
-                    disabled={sharing || !!sharePreviewUri}
+                    disabled={
+                      sharing ||
+                      !!sharePreviewUri ||
+                      !advancedSplitReady ||
+                      (customSharesOn && !sharesBalancedOk)
+                    }
                   />
                 </View>
               </Animated.View>
@@ -594,15 +890,24 @@ export default function Index() {
               tipPercent={split.tipPercent}
               tipAmount={split.tipAmount}
               totalAmount={split.totalAmount}
-              totalPerPerson={split.totalPerPerson}
+              totalPerPerson={nudgeAmount}
               people={split.people}
               isPro={isPro}
               hideReceiptBranding={hideReceiptBranding}
               customFooter={receiptFooterText}
               tone={nudgeTone}
+              templateId={activeTemplateId}
               currencyCode={currency}
               previewText={nudgePreviewText}
               zigzagHorizontalOnly
+              shareBreakdown={
+                customSharesOn && sharesBalancedOk
+                  ? shareLines.map((l) => ({
+                      name: l.name.trim() || t("sharePersonPrefix"),
+                      amount: l.amount,
+                    }))
+                  : undefined
+              }
             />
             </View>
           </ViewShot>
@@ -728,6 +1033,54 @@ export default function Index() {
         ]}
       />
       <AppAlert
+        visible={showSplitQuotaModal}
+        title={t("dailySplitLimit")}
+        message={t("dailySplitLimitBody", { total: FREE_SPLITS_PER_DAY })}
+        onRequestClose={() => setShowSplitQuotaModal(false)}
+        buttons={[
+          { text: t("notNow"), style: "cancel", onPress: () => setShowSplitQuotaModal(false) },
+          {
+            text: t("getUnlimited"),
+            onPress: () => {
+              setShowSplitQuotaModal(false);
+              router.push("/paywall");
+            },
+          },
+        ]}
+      />
+      <AppAlert
+        visible={showCustomSharesProAlert}
+        title={t("nudgrrUnlimited")}
+        message={t("customSharesProBody")}
+        onRequestClose={() => setShowCustomSharesProAlert(false)}
+        buttons={[
+          { text: t("notNow"), style: "cancel", onPress: () => setShowCustomSharesProAlert(false) },
+          {
+            text: t("unlockNudgrr"),
+            onPress: () => {
+              setShowCustomSharesProAlert(false);
+              router.push("/paywall");
+            },
+          },
+        ]}
+      />
+      <AppAlert
+        visible={showTemplateProAlert}
+        title={t("nudgrrUnlimited")}
+        message={t("templateProBody")}
+        onRequestClose={() => setShowTemplateProAlert(false)}
+        buttons={[
+          { text: t("notNow"), style: "cancel", onPress: () => setShowTemplateProAlert(false) },
+          {
+            text: t("unlockNudgrr"),
+            onPress: () => {
+              setShowTemplateProAlert(false);
+              router.push("/paywall");
+            },
+          },
+        ]}
+      />
+      <AppAlert
         visible={showWebPreviewSharingAlert}
         title={t("webPreviewLimitation")}
         message={t("webPreviewSharingFull")}
@@ -776,32 +1129,20 @@ function createStyles(colors: AppColors) {
   headerCenter: {
     flex: 1,
     alignItems: "center",
-    gap: 6,
-  },
-  wordmarkAccent: {
-    width: 28,
-    height: 3,
-    borderRadius: radii.pill,
-    backgroundColor: colors.accent,
   },
   topRowBtn: {
-    width: 60,
+    width: 44,
     minHeight: touchTarget.min,
     justifyContent: "center",
+    alignItems: "flex-start",
   },
   wordmark: {
     ...typography.wordmark,
     color: colors.textPrimary,
     textAlign: "center",
-    flex: 1,
   },
   topRowBtnPressed: {
-    opacity: 0.7,
-  },
-  settingsEmoji: {
-    ...typography.input,
-    width: 60,
-    textAlign: "left",
+    opacity: 0.65,
   },
   heroCard: {
     borderRadius: radii.xl,
@@ -817,6 +1158,11 @@ function createStyles(colors: AppColors) {
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 6 },
     elevation: 5,
+  },
+  quotaHint: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: 8,
   },
   heroDivider: {
     height: StyleSheet.hairlineWidth,

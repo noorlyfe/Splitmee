@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { Pressable, ScrollView } from "react-native-gesture-handler";
-import * as Haptics from "expo-haptics";
+import * as Haptics from "../lib/appHaptics";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,

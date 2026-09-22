@@ -37,6 +37,16 @@ export function personNamesMatch(a: string, b: string): boolean {
   return normalizePersonName(a).toLowerCase() === normalizePersonName(b).toLowerCase();
 }
 
+/** Empty or default "Person 1" / localized prefix labels — safe to overwrite from Cast. */
+export function isDefaultPersonLabel(name: string, prefix: string): boolean {
+  const trimmed = normalizePersonName(name);
+  if (!trimmed) {
+    return true;
+  }
+  const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^${escaped}\\s*\\d+$`, "i").test(trimmed);
+}
+
 export function usePeople() {
   const [people, setPeople] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,11 +93,26 @@ export function usePeople() {
     return all.find((p) => p.id === id) ?? null;
   }, []);
 
+  const deletePerson = useCallback(
+    async (id: string): Promise<boolean> => {
+      const all = await readAll();
+      const next = all.filter((p) => p.id !== id);
+      if (next.length === all.length) {
+        return false;
+      }
+      await writeAll(next);
+      await reload();
+      return true;
+    },
+    [reload]
+  );
+
   return {
     people,
     loading,
     reload,
     addPerson,
     getById,
+    deletePerson,
   };
 }

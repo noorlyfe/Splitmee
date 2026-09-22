@@ -5,10 +5,10 @@ import type { SupportedLocale } from "../lib/i18n";
  */
 
 /** Free tier: nudges per calendar month (resets on the 1st, local time). */
-export const FREE_NUDGES_PER_MONTH = 2;
+export const FREE_NUDGES_PER_MONTH = 5;
 
 /** Appended to every shared nudge for free users (Pro removes this). */
-export const NUDGE_MESSAGE_WATERMARK = "\n\nSent via Nudgrr";
+export const NUDGE_MESSAGE_WATERMARK = "\n\nSent via Splitmee";
 
 export type NudgeTone = "funny" | "casual" | "passiveAggressive" | "serious";
 
@@ -162,7 +162,7 @@ const FUNNY: readonly string[] = [
   "That pasta cost {amount}. Worth it. Pay it.",
   "The dessert we shared? That's {amount}.",
   "You ordered extra bread. The math is {amount}.",
-  "The wine was worth it. So is {amount}.",
+  "That dinner was worth it. So is {amount}.",
   "Every bite was {amount} / number of bites. Pay up.",
   "Taste was 10/10. Bill was {amount}. Your share awaits.",
   "Chef's kiss and {amount} please.",
@@ -254,7 +254,7 @@ const FUNNY_DA: readonly string[] = [
   "Pengene taler: {amount}.",
   "En god ven betaler {amount} tilbage.",
   "Det sker for de bedste. {amount}.",
-  "Nudgrr siger: {amount}.",
+  "Splitmee siger: {amount}.",
   "Jeg er stadig her. {amount} er også.",
   "Regningen er betalt. Næsten. {amount} mangler.",
   "Tillykke! Du skylder {amount}.",
@@ -446,7 +446,7 @@ const CASUAL: readonly string[] = [
   "Hey, you owe {amount} from dinner 🙌",
   "You owe {amount} 👍",
   "Quick one: {amount} from earlier",
-  "{amount} when you get a sec 🙏",
+  "{amount} when you get a sec",
   "Can you send {amount} when you can?",
   "Your part came to {amount}.",
   "Just pinging for {amount}.",

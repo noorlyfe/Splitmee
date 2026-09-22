@@ -2,6 +2,12 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import type { NudgeTone } from "../constants/messages";
+import {
+  DEFAULT_RECEIPT_TEMPLATE,
+  isReceiptTemplateId,
+  type ReceiptTemplateId,
+} from "../constants/receiptTemplates";
+import { setHapticsEnabled } from "../lib/appHaptics";
 import { isValidCurrencyCode } from "../lib/currency";
 import { LOCALE_DEFAULT_CURRENCY } from "../lib/i18n";
 
@@ -12,14 +18,22 @@ const LOCALE_DEFAULT_CURRENCY_CODES = new Set(Object.values(LOCALE_DEFAULT_CURRE
 
 type Preferences = {
   defaultTone: NudgeTone;
+  defaultTemplateId: ReceiptTemplateId;
   currency: string;
   hideReceiptBranding: boolean;
+  paymentHint: string;
+  overdueNotifications: boolean;
+  hapticsEnabled: boolean;
 };
 
 const DEFAULT_PREFERENCES: Preferences = {
   defaultTone: "funny",
+  defaultTemplateId: DEFAULT_RECEIPT_TEMPLATE,
   currency: "USD",
   hideReceiptBranding: false,
+  paymentHint: "",
+  overdueNotifications: true,
+  hapticsEnabled: true,
 };
 
 function isTone(value: string): value is NudgeTone {
@@ -34,10 +48,18 @@ type AppPreferencesContextValue = {
   loaded: boolean;
   defaultTone: NudgeTone;
   setDefaultTone: (tone: NudgeTone) => Promise<void>;
+  defaultTemplateId: ReceiptTemplateId;
+  setDefaultTemplateId: (id: ReceiptTemplateId) => Promise<void>;
   currency: string;
   setCurrency: (code: string) => Promise<void>;
   hideReceiptBranding: boolean;
   setHideReceiptBranding: (hide: boolean) => Promise<void>;
+  paymentHint: string;
+  setPaymentHint: (hint: string) => Promise<void>;
+  overdueNotifications: boolean;
+  setOverdueNotifications: (on: boolean) => Promise<void>;
+  hapticsEnabled: boolean;
+  setHapticsEnabledPref: (on: boolean) => Promise<void>;
   reload: () => Promise<void>;
 };
 
@@ -46,8 +68,20 @@ const AppPreferencesContext = createContext<AppPreferencesContextValue | null>(n
 export function AppPreferencesProvider({ children }: { children: React.ReactNode }) {
   const [loaded, setLoaded] = useState(false);
   const [defaultTone, setDefaultToneState] = useState<NudgeTone>(DEFAULT_PREFERENCES.defaultTone);
+  const [defaultTemplateId, setDefaultTemplateIdState] = useState<ReceiptTemplateId>(
+    DEFAULT_PREFERENCES.defaultTemplateId
+  );
   const [currency, setCurrencyState] = useState<string>(DEFAULT_PREFERENCES.currency);
-  const [hideReceiptBranding, setHideReceiptBrandingState] = useState<boolean>(DEFAULT_PREFERENCES.hideReceiptBranding);
+  const [hideReceiptBranding, setHideReceiptBrandingState] = useState<boolean>(
+    DEFAULT_PREFERENCES.hideReceiptBranding
+  );
+  const [paymentHint, setPaymentHintState] = useState<string>(DEFAULT_PREFERENCES.paymentHint);
+  const [overdueNotifications, setOverdueNotificationsState] = useState<boolean>(
+    DEFAULT_PREFERENCES.overdueNotifications
+  );
+  const [hapticsEnabled, setHapticsEnabledState] = useState<boolean>(
+    DEFAULT_PREFERENCES.hapticsEnabled
+  );
 
   const loadFromStorage = useCallback(async () => {
     try {
@@ -61,6 +95,9 @@ export function AppPreferencesProvider({ children }: { children: React.ReactNode
       if (typeof parsed.defaultTone === "string" && isTone(parsed.defaultTone)) {
         setDefaultToneState(parsed.defaultTone);
       }
+      if (typeof parsed.defaultTemplateId === "string" && isReceiptTemplateId(parsed.defaultTemplateId)) {
+        setDefaultTemplateIdState(parsed.defaultTemplateId);
+      }
       if (typeof parsed.currency === "string") {
         const upper = parsed.currency.toUpperCase();
         if (isAllowedCurrencyCode(upper)) {
@@ -69,6 +106,16 @@ export function AppPreferencesProvider({ children }: { children: React.ReactNode
       }
       if (typeof parsed.hideReceiptBranding === "boolean") {
         setHideReceiptBrandingState(parsed.hideReceiptBranding);
+      }
+      if (typeof parsed.paymentHint === "string") {
+        setPaymentHintState(parsed.paymentHint.slice(0, 120));
+      }
+      if (typeof parsed.overdueNotifications === "boolean") {
+        setOverdueNotificationsState(parsed.overdueNotifications);
+      }
+      if (typeof parsed.hapticsEnabled === "boolean") {
+        setHapticsEnabledState(parsed.hapticsEnabled);
+        setHapticsEnabled(parsed.hapticsEnabled);
       }
     } catch {
       // ignore invalid payloads
@@ -88,6 +135,10 @@ export function AppPreferencesProvider({ children }: { children: React.ReactNode
     };
   }, [loadFromStorage]);
 
+  useEffect(() => {
+    setHapticsEnabled(hapticsEnabled);
+  }, [hapticsEnabled]);
+
   const reload = useCallback(async () => {
     await loadFromStorage();
   }, [loadFromStorage]);
@@ -100,12 +151,42 @@ export function AppPreferencesProvider({ children }: { children: React.ReactNode
     }
   }, []);
 
+  const snapshot = useCallback(
+    (patch: Partial<Preferences>): Preferences => ({
+      defaultTone,
+      defaultTemplateId,
+      currency,
+      hideReceiptBranding,
+      paymentHint,
+      overdueNotifications,
+      hapticsEnabled,
+      ...patch,
+    }),
+    [
+      currency,
+      defaultTemplateId,
+      defaultTone,
+      hideReceiptBranding,
+      overdueNotifications,
+      paymentHint,
+      hapticsEnabled,
+    ]
+  );
+
   const setDefaultTone = useCallback(
     async (tone: NudgeTone) => {
       setDefaultToneState(tone);
-      await persist({ defaultTone: tone, currency, hideReceiptBranding });
+      await persist(snapshot({ defaultTone: tone }));
     },
-    [currency, hideReceiptBranding, persist]
+    [persist, snapshot]
+  );
+
+  const setDefaultTemplateId = useCallback(
+    async (id: ReceiptTemplateId) => {
+      setDefaultTemplateIdState(id);
+      await persist(snapshot({ defaultTemplateId: id }));
+    },
+    [persist, snapshot]
   );
 
   const setCurrency = useCallback(
@@ -115,27 +196,61 @@ export function AppPreferencesProvider({ children }: { children: React.ReactNode
         return;
       }
       setCurrencyState(upper);
-      await persist({ defaultTone, currency: upper, hideReceiptBranding });
+      await persist(snapshot({ currency: upper }));
     },
-    [defaultTone, hideReceiptBranding, persist]
+    [persist, snapshot]
   );
 
   const setHideReceiptBranding = useCallback(
     async (hide: boolean) => {
       setHideReceiptBrandingState(hide);
-      await persist({ defaultTone, currency, hideReceiptBranding: hide });
+      await persist(snapshot({ hideReceiptBranding: hide }));
     },
-    [defaultTone, currency, persist]
+    [persist, snapshot]
+  );
+
+  const setPaymentHint = useCallback(
+    async (hint: string) => {
+      const next = hint.slice(0, 120);
+      setPaymentHintState(next);
+      await persist(snapshot({ paymentHint: next }));
+    },
+    [persist, snapshot]
+  );
+
+  const setOverdueNotifications = useCallback(
+    async (on: boolean) => {
+      setOverdueNotificationsState(on);
+      await persist(snapshot({ overdueNotifications: on }));
+    },
+    [persist, snapshot]
+  );
+
+  const setHapticsEnabledPref = useCallback(
+    async (on: boolean) => {
+      setHapticsEnabledState(on);
+      setHapticsEnabled(on);
+      await persist(snapshot({ hapticsEnabled: on }));
+    },
+    [persist, snapshot]
   );
 
   const value: AppPreferencesContextValue = {
     loaded,
     defaultTone,
     setDefaultTone,
+    defaultTemplateId,
+    setDefaultTemplateId,
     currency,
     setCurrency,
     hideReceiptBranding,
     setHideReceiptBranding,
+    paymentHint,
+    setPaymentHint,
+    overdueNotifications,
+    setOverdueNotifications,
+    hapticsEnabled,
+    setHapticsEnabledPref,
     reload,
   };
 

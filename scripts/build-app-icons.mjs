@@ -15,7 +15,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
 const source = path.join(root, "assets", "_source-app-icon.png");
 
-/** Only remove the outer squircle cream — tight thresholds so receipt ink / tan bars stay. */
+/** Only remove the outer squircle cream: tight thresholds so receipt ink / tan bars stay. */
 function shouldMakeTransparent(r, g, b, a) {
   if (a < 12) return true;
   const sum = r + g + b;
@@ -112,7 +112,7 @@ async function main() {
   }
 
   console.log("Wrote:", outIcon, outAdaptive, outIos);
-  console.log("Wrote Android mipmaps (webp) for mdpi–xxxhdpi");
+  console.log("Wrote Android mipmaps (webp) for mdpi to xxxhdpi");
 }
 
 main().catch((e) => {

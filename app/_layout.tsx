@@ -28,7 +28,7 @@ import { initOneSignal } from "../lib/oneSignal";
 SplashScreen.preventAutoHideAsync();
 SplashScreen.setOptions({ duration: 280, fade: true });
 
-const SPLASH_BACKGROUND = "#FFF9F0";
+const SPLASH_BACKGROUND = "#090B10";
 
 if (Platform.OS !== "web") {
   void initOneSignal();

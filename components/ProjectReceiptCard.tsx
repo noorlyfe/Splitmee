@@ -41,52 +41,11 @@ type ReceiptColors = {
   divider: string;
   muted: string;
   surface: string;
+  accentSoft: string;
 };
 
 function receiptColorsForTheme(isDark: boolean): ReceiptColors {
   return getReceiptColors(isDark);
-}
-
-function DashedRule({ color }: { color: string }) {
-  return (
-    <View
-      style={{
-        borderTopWidth: 1,
-        borderColor: color,
-        borderStyle: "dashed",
-        marginVertical: 10,
-        width: "100%",
-      }}
-    />
-  );
-}
-
-function PerforationEdge({ width, color, position }: { width: number; color: string; position: "top" | "bottom" }) {
-  const circles = Math.floor(width / 12);
-  return (
-    <View
-      style={{
-        flexDirection: "row",
-        justifyContent: "space-around",
-        paddingHorizontal: 6,
-        marginTop: position === "bottom" ? 12 : 0,
-        marginBottom: position === "top" ? 12 : 0,
-      }}
-    >
-      {Array.from({ length: circles }).map((_, i) => (
-        <View
-          key={i}
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: 3,
-            backgroundColor: color,
-            opacity: 0.4,
-          }}
-        />
-      ))}
-    </View>
-  );
 }
 
 export const ProjectReceiptCard = memo(function ProjectReceiptCard({
@@ -164,15 +123,18 @@ export const ProjectReceiptCard = memo(function ProjectReceiptCard({
         },
       ]}
     >
-      <PerforationEdge width={width} color={colors.muted} position="top" />
+      <View style={[styles.accentBar, { backgroundColor: colors.accent }]} />
 
       <View style={styles.inner}>
+        {showBranding ? (
+          <Text style={[styles.brand, { color: colors.accent }]}>{t("receiptBrandLabel")}</Text>
+        ) : null}
         <Text style={[styles.titleMain, { color: colors.text }]} numberOfLines={3}>
           {title}
         </Text>
         <Text style={[styles.date, { color: colors.muted }]}>{dateRangeLabel}</Text>
 
-        <DashedRule color={colors.divider} />
+        <View style={[styles.hairline, { backgroundColor: colors.divider }]} />
 
         <View style={styles.block}>
           {expenses.length === 0 ? (
@@ -196,7 +158,7 @@ export const ProjectReceiptCard = memo(function ProjectReceiptCard({
                       style={[styles.paidByLine, { color: colors.muted }]}
                     >
                       {t("projectExpensePaidLine", {
-                        name: nameById.get(payment.participantId) ?? "—",
+                        name: nameById.get(payment.participantId) ?? "",
                         amount: formatCurrency(payment.amount, currencyCode),
                       })}
                     </Text>
@@ -207,7 +169,7 @@ export const ProjectReceiptCard = memo(function ProjectReceiptCard({
           )}
         </View>
 
-        <DashedRule color={colors.divider} />
+        <View style={[styles.hairline, { backgroundColor: colors.divider }]} />
 
         <View style={[styles.row, rtlRow(isRTL)]}>
           <Text style={[styles.lineLabelBold, { color: colors.text }]}>{t("projectReceiptTotalLabel")}</Text>
@@ -216,10 +178,10 @@ export const ProjectReceiptCard = memo(function ProjectReceiptCard({
           </Text>
         </View>
 
-        <DashedRule color={colors.divider} />
+        <View style={[styles.hairline, { backgroundColor: colors.divider }]} />
 
         {focusTransfer ? (
-          <View style={[styles.focusBox, { borderColor: colors.divider, backgroundColor: colors.surface }]}>
+          <View style={[styles.focusBox, { backgroundColor: colors.accentSoft ?? colors.surface }]}>
             <Text style={[styles.focusAmount, { color: colors.accent }]}>
               {t("projectReceiptTransferLine", {
                 from: focusTransfer.fromParticipantName,
@@ -338,8 +300,6 @@ export const ProjectReceiptCard = memo(function ProjectReceiptCard({
           <Text style={[styles.madeWith, { color: colors.muted }]}>{t("projectReceiptMadeWith")}</Text>
         ) : null}
       </View>
-
-      <PerforationEdge width={width} color={colors.muted} position="bottom" />
     </View>
   );
 });
@@ -348,36 +308,54 @@ const styles = StyleSheet.create({
   root: {
     alignSelf: "center",
     flexShrink: 0,
-    borderWidth: 0.5,
-    borderRadius: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 22,
     overflow: "hidden",
     ...Platform.select({
       ios: {
-        shadowColor: "#000",
-        shadowOpacity: 0.08,
-        shadowRadius: 18,
-        shadowOffset: { width: 0, height: 10 },
+        shadowColor: "#12141A",
+        shadowOpacity: 0.14,
+        shadowRadius: 24,
+        shadowOffset: { width: 0, height: 14 },
       },
-      android: { elevation: 6 },
+      android: { elevation: 8 },
       default: {},
     }),
   },
+  accentBar: {
+    height: 4,
+    width: "100%",
+  },
+  brand: {
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 11,
+    letterSpacing: 2.6,
+    textTransform: "uppercase",
+    textAlign: "center",
+    marginBottom: 6,
+  },
   inner: {
-    paddingHorizontal: 20,
-    paddingVertical: 4,
+    paddingHorizontal: 22,
+    paddingTop: 18,
+    paddingBottom: 16,
+    gap: 10,
+  },
+  hairline: {
+    height: StyleSheet.hairlineWidth,
+    width: "100%",
+    marginVertical: 4,
   },
   titleMain: {
-    fontFamily: fonts.mono,
-    fontSize: 18,
-    letterSpacing: 2,
+    fontFamily: fonts.bodyBold,
+    fontSize: 22,
+    letterSpacing: -0.5,
     textAlign: "center",
-    marginTop: 8,
+    lineHeight: 28,
   },
   date: {
-    fontFamily: fonts.mono,
-    fontSize: 10,
+    fontFamily: fonts.body,
+    fontSize: 12,
     textAlign: "center",
-    marginTop: 6,
     marginBottom: 4,
   },
   block: {
@@ -388,92 +366,86 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   paidByLine: {
-    fontFamily: fonts.mono,
-    fontSize: 9,
-    letterSpacing: 0.2,
+    fontFamily: fonts.body,
+    fontSize: 11,
     paddingLeft: 4,
   },
   transferLine: {
-    fontFamily: fonts.mono,
-    fontSize: 10,
-    letterSpacing: 0.2,
+    fontFamily: fonts.body,
+    fontSize: 13,
     textAlign: "center",
+    lineHeight: 18,
   },
   mutedLine: {
-    fontFamily: fonts.mono,
-    fontSize: 10,
+    fontFamily: fonts.body,
+    fontSize: 13,
     textAlign: "center",
   },
   sectionHeading: {
-    fontFamily: fonts.mono,
-    fontSize: 9,
-    letterSpacing: 1.4,
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 11,
+    letterSpacing: 1.2,
     textTransform: "uppercase",
     textAlign: "center",
-    marginTop: 4,
-    marginBottom: 6,
+    marginTop: 6,
+    marginBottom: 4,
   },
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     gap: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
   },
   rowFocus: {
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 4,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
   },
   lineLabel: {
-    fontFamily: fonts.mono,
-    fontSize: 10,
+    fontFamily: fonts.body,
+    fontSize: 13,
     flex: 1,
     paddingRight: 8,
   },
   lineLabelFocus: {
-    fontWeight: "500",
+    fontFamily: fonts.bodySemiBold,
   },
   lineVal: {
-    fontFamily: fonts.mono,
-    fontSize: 10,
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 13,
     flexShrink: 0,
   },
   lineValOwed: {
-    fontWeight: "500",
+    fontFamily: fonts.bodyBold,
   },
   lineLabelBold: {
-    fontFamily: fonts.mono,
-    fontSize: 11,
-    fontWeight: "500",
+    fontFamily: fonts.bodyBold,
+    fontSize: 14,
     flex: 1,
   },
   lineValBold: {
-    fontFamily: fonts.mono,
-    fontSize: 11,
-    fontWeight: "500",
+    fontFamily: fonts.bodyBold,
+    fontSize: 14,
   },
   focusBox: {
-    borderWidth: 0.5,
-    borderRadius: 4,
-    padding: 12,
+    borderRadius: 16,
+    padding: 14,
     alignItems: "center",
     gap: 4,
     marginBottom: 4,
   },
   focusAmount: {
-    fontFamily: fonts.mono,
+    fontFamily: fonts.bodyBold,
     fontSize: typography.resultPrimary.fontSize,
-    fontWeight: "500",
     letterSpacing: typography.resultPrimary.letterSpacing,
     textAlign: "center",
   },
   madeWith: {
-    fontFamily: fonts.mono,
-    fontSize: 8,
-    letterSpacing: 0.5,
+    fontFamily: fonts.body,
+    fontSize: 10,
+    letterSpacing: 0.3,
     textAlign: "center",
-    marginTop: 12,
-    marginBottom: 8,
+    marginTop: 8,
   },
 });

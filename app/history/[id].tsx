@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
-import * as Haptics from "expo-haptics";
+import * as Haptics from "../../lib/appHaptics";
 import * as Sharing from "expo-sharing";
 import { shareReceiptImage } from "../../lib/shareReceiptImage";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -49,7 +49,7 @@ function footerForRecord(record: SplitRecord): string {
     return "";
   }
   // Legacy: older saves stored the default “Made with Nudgrr …” line; omit it everywhere now.
-  if (raw.startsWith("Made with Nudgrr")) {
+  if (raw.startsWith("Made with Nudgrr") || raw.startsWith("Made with Splitmee")) {
     return "";
   }
   return raw;
@@ -253,6 +253,7 @@ export default function HistoryReceiptScreen() {
                   hideReceiptBranding={hideReceiptBranding}
                   customFooter={receiptCustomFooter}
                   tone={tone}
+                  templateId={record.receiptTemplateId}
                   currencyCode={record.currency ?? "USD"}
                   previewText={record.nudgePreviewText}
                 />

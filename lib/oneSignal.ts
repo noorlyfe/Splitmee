@@ -9,7 +9,7 @@ function getAppId(): string | undefined {
   return Constants.expoConfig?.extra?.oneSignalAppId as string | undefined;
 }
 
-/** Initialize OneSignal once — must complete before any User/tag API calls. */
+/** Initialize OneSignal once: must complete before any User/tag API calls. */
 export function initOneSignal(): Promise<void> {
   if (Platform.OS === "web") {
     return Promise.resolve();

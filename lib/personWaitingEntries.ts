@@ -2,6 +2,12 @@ import type { ProjectWaitingEntry } from "../hooks/useProjects";
 import type { Project } from "../hooks/useProjects";
 import { personNamesMatch } from "../hooks/usePeople";
 import type { SplitRecord } from "../hooks/useSplitHistory";
+import {
+  amountsMagnitude,
+  emptyAmounts,
+  sumByCurrency,
+  type AmountsByCurrency,
+} from "./moneyByCurrency";
 
 export type PersonWaitingRow =
   | {
@@ -91,7 +97,7 @@ export function getPersonWaitingRows(
       record,
       description: record.restaurant.trim() || linked,
       amount: Number.isFinite(record.totalPerPerson) ? record.totalPerPerson : 0,
-      currency: record.currency ?? "USD",
+      currency: record.currency ?? appCurrency,
       sentAt: splitSentAt(record),
       settled: isSplitSettled(record),
     });
@@ -113,15 +119,29 @@ export function getPersonWaitingRows(
   return rows.sort((a, b) => b.sentAt.localeCompare(a.sentAt));
 }
 
+/** Magnitude for sorting only: prefer getPersonOutstandingByCurrency for display. */
 export function getPersonOutstandingAmount(
   personName: string,
   splitItems: SplitRecord[],
   projects: Project[],
   appCurrency: string
 ): number {
-  return getPersonWaitingRows(personName, splitItems, projects, appCurrency)
-    .filter((row) => !row.settled)
-    .reduce((sum, row) => sum + row.amount, 0);
+  return amountsMagnitude(getPersonOutstandingByCurrency(personName, splitItems, projects, appCurrency));
+}
+
+export function getPersonOutstandingByCurrency(
+  personName: string,
+  splitItems: SplitRecord[],
+  projects: Project[],
+  appCurrency: string
+): AmountsByCurrency {
+  const unpaid = getPersonWaitingRows(personName, splitItems, projects, appCurrency).filter(
+    (row) => !row.settled
+  );
+  if (unpaid.length === 0) {
+    return emptyAmounts(appCurrency);
+  }
+  return sumByCurrency(unpaid, { preferredCurrency: appCurrency, fallbackCurrency: appCurrency });
 }
 
 export function daysOutstanding(sentAt: string): number {

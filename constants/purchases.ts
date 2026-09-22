@@ -29,7 +29,7 @@ export const REVENUECAT_API_KEY_ANDROID = sanitizeRevenueCatKey(
   env("EXPO_PUBLIC_REVENUECAT_API_KEY_ANDROID") || shared || FALLBACK_ANDROID_KEY
 );
 
-/** @deprecated Use `REVENUECAT_API_KEY_IOS` / `ANDROID` — kept for a few legacy imports. */
+/** @deprecated Use `REVENUECAT_API_KEY_IOS` / `ANDROID` :  kept for a few legacy imports. */
 export const REVENUECAT_API_KEY = REVENUECAT_API_KEY_IOS;
 
 export function isRevenueCatApiKeySet(): boolean {

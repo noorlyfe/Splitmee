@@ -15,7 +15,7 @@ export function getReceiptCaptureWidth(windowWidth: number): number {
 }
 
 /**
- * ViewShot PNGs are often @2/@3 of logical capture width — normalize for preview sizing.
+ * ViewShot PNGs are often @2/@3 of logical capture width: normalize for preview sizing.
  */
 export function normalizeCapturedReceiptSize(
   intrinsic: { width: number; height: number },
@@ -37,8 +37,8 @@ export function normalizeCapturedReceiptSize(
 export type ReceiptPreviewLayoutMode = "fitScreen" | "scrollable";
 
 /**
- * fitScreen — scale down to fit modal (split tab).
- * scrollable — readable width, natural height, vertical scroll (waiting game).
+ * fitScreen: scale down to fit modal (split tab).
+ * scrollable: readable width, natural height, vertical scroll (waiting game).
  */
 export function computeReceiptPreviewLayout(
   intrinsic: { width: number; height: number } | null,
@@ -81,7 +81,7 @@ export function computeReceiptPreviewLayout(
   };
 }
 
-/** @2x export width only — preserves aspect ratio (no vertical squash). */
+/** @2x export width only: preserves aspect ratio (no vertical squash). */
 export function getReceiptCaptureExportWidth(captureWidth: number) {
   return Math.round(captureWidth * 2);
 }

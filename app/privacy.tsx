@@ -1,46 +1,88 @@
 import { useMemo } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { fonts, radii, spacing, touchTarget, typography, type AppColors } from "../constants/theme";
+import { fonts, spacing, touchTarget, typography, type AppColors } from "../constants/theme";
 import { useLocale } from "../hooks/useLocale";
 import { useColors } from "../hooks/useColors";
 import { useTheme } from "../hooks/useTheme";
 import { rtlRow } from "../lib/rtl";
 import { safeRouterBack } from "../lib/safeRouterBack";
 
-export const PRIVACY_POLICY_BODY = `Last updated: April 23, 2026
+const LAST_UPDATED = "August 29, 2026";
 
-Nudgrr ("we", "us") is operated by Noorlyfe. This Privacy Policy explains how the Nudgrr mobile app handles information when you use the app.
+function buildPrivacyBody(storeLine: string): string {
+  return `Last updated: ${LAST_UPDATED}
 
-We do not require an account to use the core features, and we do not directly identify users.
+Splitmee ("we", "us", "our") is operated by Noorlyfe. This Privacy Policy explains how the Splitmee mobile application ("App") handles information.
 
-INFORMATION WE PROCESS
-• Bill-splitting and receipt-style content you enter in the app is processed on your device to show results.
-• Optional subscription features may be processed by the Apple App Store, Google Play, and RevenueCat, Inc. (our subscription provider), to verify purchases and entitlements. RevenueCat may process a pseudonymous app user identifier and purchase-related data as described in their policies.
-• We use on-device or local storage (e.g. preferences, usage counters for product improvement) as implemented in the app.
+WHO WE ARE
+Noorlyfe operates Splitmee. For privacy questions, contact: contact@noorlyfe.com
 
-We do not sell or share personal data for advertising or marketing purposes.
+SUMMARY
+Splitmee is designed to work primarily on your device. We do not require you to create an account for core features, and we do not operate a Splitmee user profile database. Some optional features use third-party services that may process limited technical or purchase-related data, as described below.
 
-INTERNATIONAL USERS
-The App is available globally. If you use the App, you understand that your information may be processed by third-party services in countries outside your own.
+INFORMATION STORED ON YOUR DEVICE
+Depending on how you use the App, the following may be stored locally on your device (for example via on-device storage):
+• Bill, tip, split, project, and receipt-related content you enter
+• Names or labels you add for people you split with (this may include information about other people you choose to enter)
+• Payment-related details you optionally save (such as payment handles or a short bank note) so you can reuse them in reminders
+• Preferences (language, theme, currency, receipt footer, and similar settings)
+• Product counters and local activity used to operate quotas, history, and in-app features
+• FX rates you set or keep on device
 
-YOUR RIGHTS
-Depending on your location, you may have rights to access, correct, or delete your personal data. We do not operate a remote database that stores a personal account or profile for you; some information may exist only on your device, which you can often control by deleting the app or clearing app data (where your device allows). We may not be able to act on all requests directly. For data processed by third parties, please refer to their respective privacy policies, or contact us at nudgrr@noorlyfe.com so we can help where we can.
+This on-device information is used to provide the App's features to you. We do not receive a copy of that content into a Splitmee backend account system, because core features are local-first.
+
+NOTIFICATIONS
+• Local notifications: If you enable overdue or reminder alerts, the App may schedule notifications on your device. Those notifications are generated on device and may include names or amounts you already stored in the App.
+• Push-related services: To support push notification delivery and related product messaging, we use OneSignal, Inc. OneSignal may process a device/push identifier and related technical data. Where the App sets tags (for example subscription status, locale, or last reminder activity), those tags may be processed by OneSignal under its own policies. You can control notification permission in your device settings.
+
+SUBSCRIPTIONS AND PURCHASES
+${storeLine}
+
+SHARING YOU INITIATE
+If you use share, export, backup, copy, or open-link features, information you choose to share (such as a receipt image, reminder text, backup file, or payment link) leaves your device and is handled by the app, service, or person you select. We do not control those third parties.
+
+ANALYTICS
+The App may keep lightweight feature counters on your device to help us understand whether flows work. These counters are stored locally and are not sent to an external advertising analytics network by Splitmee.
+
+HOW WE DO NOT USE DATA
+We do not sell personal data. We do not use your bill-splitting content for advertising networks. We do not require an account for core use.
+
+INTERNATIONAL PROCESSING
+If you use third-party services described in this policy (for example Apple, Google, RevenueCat, or OneSignal), their processing may occur in countries other than your own, subject to their terms and safeguards.
+
+YOUR CHOICES AND RIGHTS
+You can delete locally stored App data by clearing App data or uninstalling the App (depending on your device). You can revoke notification permission in system settings. You can restore or manage subscriptions through the store account you used to purchase.
+
+Depending on your location (including the EEA/UK and similar regimes), you may have rights to access, correct, delete, restrict, or object to certain processing, and to lodge a complaint with a supervisory authority. Because much Splitmee data exists only on your device, some requests are best fulfilled by you on the device. For data held by third parties (Apple, Google, RevenueCat, OneSignal), contact them or email us at contact@noorlyfe.com and we will help where we reasonably can.
 
 SECURITY
-We take reasonable measures to protect information handled within the App, but no method of transmission or storage is completely secure.
+We take reasonable technical and organizational measures appropriate to a local-first mobile app. No method of storage or transmission is completely secure.
 
 CHILDREN
-Nudgrr is not intended for children under 13, and we do not knowingly collect personal information from children under 13.
-
-CONTACT
-Questions about this policy: nudgrr@noorlyfe.com
+Splitmee is not directed to children under 13, and we do not knowingly collect personal information from children under 13. If you believe a child has provided personal information through the App, contact us and we will take appropriate steps. Where local law sets a higher digital-consent age, do not use the App if you are below that age.
 
 CHANGES
-We may update this policy from time to time. The "Last updated" date will change when we do.`;
+We may update this Privacy Policy from time to time. The "Last updated" date will change when we do. Continued use of the App after an update means you acknowledge the revised policy, where permitted by law.
+
+CONTACT
+contact@noorlyfe.com`;
+}
+
+export const PRIVACY_POLICY_BODY_IOS = buildPrivacyBody(
+  `If you purchase or restore a subscription, purchase verification may involve the Apple App Store and RevenueCat, Inc. (our subscription provider). Apple and RevenueCat may process purchase status, a pseudonymous app user identifier, and related entitlement data as described in their policies. Payment card details for App Store purchases are handled by Apple, not by Splitmee.`
+);
+
+export const PRIVACY_POLICY_BODY_ANDROID = buildPrivacyBody(
+  `If you purchase or restore a subscription, purchase verification may involve Google Play and RevenueCat, Inc. (our subscription provider). Google and RevenueCat may process purchase status, a pseudonymous app user identifier, and related entitlement data as described in their policies. Payment instrument details for Play purchases are handled by Google, not by Splitmee.`
+);
+
+/** Defaults to the current platform. */
+export const PRIVACY_POLICY_BODY =
+  Platform.OS === "android" ? PRIVACY_POLICY_BODY_ANDROID : PRIVACY_POLICY_BODY_IOS;
 
 export default function PrivacyScreen() {
   const colors = useColors();
@@ -50,6 +92,7 @@ export default function PrivacyScreen() {
   const router = useRouter();
   const { t, isRTL } = useLocale();
   const { isDark } = useTheme();
+  const body = Platform.OS === "android" ? PRIVACY_POLICY_BODY_ANDROID : PRIVACY_POLICY_BODY_IOS;
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -69,7 +112,7 @@ export default function PrivacyScreen() {
         ]}
         showsVerticalScrollIndicator
       >
-        <Text style={styles.body}>{PRIVACY_POLICY_BODY}</Text>
+        <Text style={styles.body}>{body}</Text>
       </ScrollView>
     </View>
   );
@@ -77,30 +120,30 @@ export default function PrivacyScreen() {
 
 function createStyles(colors: AppColors) {
   return StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: spacing.lg,
-    minHeight: touchTarget.min,
-  },
-  back: { minWidth: 56, minHeight: 44, justifyContent: "center" },
-  backText: { ...typography.body, fontFamily: fonts.bodySemiBold, color: colors.accent },
-  title: {
-    ...typography.body,
-    fontFamily: fonts.bodyBold,
-    color: colors.textPrimary,
-    flex: 1,
-    textAlign: "center",
-  },
-  headerSpacer: { minWidth: 56 },
-  scroll: { flex: 1 },
-  content: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
-  body: {
-    ...typography.badge,
-    color: colors.textPrimary,
-  },
-  pressed: { opacity: 0.86 },
+    screen: { flex: 1, backgroundColor: colors.background },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: spacing.lg,
+      minHeight: touchTarget.min,
+    },
+    back: { minWidth: 56, minHeight: 44, justifyContent: "center" },
+    backText: { ...typography.body, fontFamily: fonts.bodySemiBold, color: colors.accent },
+    title: {
+      ...typography.body,
+      fontFamily: fonts.bodyBold,
+      color: colors.textPrimary,
+      flex: 1,
+      textAlign: "center",
+    },
+    headerSpacer: { minWidth: 56 },
+    scroll: { flex: 1 },
+    content: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
+    body: {
+      ...typography.badge,
+      color: colors.textPrimary,
+    },
+    pressed: { opacity: 0.86 },
   });
 }

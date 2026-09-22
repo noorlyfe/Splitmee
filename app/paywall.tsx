@@ -19,11 +19,13 @@ import Purchases, {
   type PurchasesPackage,
 } from "react-native-purchases";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
+import { Ionicons } from "@expo/vector-icons";
 
 import { AppAlert } from "../components/AppAlert";
 import { getAppStoreUrl } from "../constants/storeLinks";
 import { fonts, radii, spacing, touchTarget, typography, type AppColors } from "../constants/theme";
-import { isRevenueCatApiKeySet } from "../constants/purchases";
+import { isRevenueCatApiKeySet, REVENUECAT_UNLIMITED_ENTITLEMENT_ID } from "../constants/purchases";
 import { useLocale } from "../hooks/useLocale";
 import { useColors } from "../hooks/useColors";
 import { useTheme } from "../hooks/useTheme";
@@ -32,21 +34,17 @@ import { rtlRow } from "../lib/rtl";
 import { useProStatus } from "../hooks/useProStatus";
 import { trackEvent } from "../lib/analytics";
 import { safeRouterBack } from "../lib/safeRouterBack";
-import { PRIVACY_POLICY_BODY } from "./privacy";
+import { PRIVACY_POLICY_BODY_ANDROID, PRIVACY_POLICY_BODY_IOS } from "./privacy";
 import { TERMS_BODY_ANDROID } from "./terms";
 
 const APPLE_EULA_URL = "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/";
 
 const PAYWALL_FEATURE_KEYS = [
   "paywallFeatureUnlimitedNudges",
-  "paywallFeatureReceiptPreview",
   "paywallFeatureWaitingGame",
-  "paywallFeaturePeople",
   "paywallFeatureGroups",
-  "paywallFeatureRemoveBranding",
-  "paywallFeatureCustomHeader",
-  "paywallFeatureFooter",
-  "paywallFeatureNudgeWatermark",
+  "paywallFeaturePowerTools",
+  "paywallFeatureStoryDrops",
 ] as const;
 
 function pickSubscriptionPackage(offerings: PurchasesOfferings): PurchasesPackage | null {
@@ -73,18 +71,22 @@ function PaywallHero({
   styles,
   title,
   subtitle,
+  badge,
 }: {
   styles: PaywallStyles;
   title: string;
   subtitle: string;
+  badge: string;
 }) {
   return (
-    <View style={styles.heroSection}>
-      <View style={styles.heroFrame}>
-        <Text style={styles.heroTitle}>{title}</Text>
+    <Animated.View entering={FadeInDown.duration(480).springify().damping(18)} style={styles.heroSection}>
+      <View style={styles.markDisk}>
+        <Text style={styles.markGlyph}>∞</Text>
       </View>
+      <Text style={styles.heroEyebrow}>{badge}</Text>
+      <Text style={styles.heroTitle}>{title}</Text>
       <Text style={styles.heroSubtitle}>{subtitle}</Text>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -92,20 +94,34 @@ function PaywallFeatureList({
   styles,
   labels,
   isRTL,
+  accent,
 }: {
   styles: PaywallStyles;
   labels: string[];
   isRTL: boolean;
+  accent: string;
 }) {
   return (
-    <View style={styles.featureCard}>
-      {labels.map((label) => (
-        <View key={label} style={[styles.featureRow, rtlRow(isRTL)]}>
-          <Text style={styles.featureCheck}>✓</Text>
+    <Animated.View
+      entering={FadeInDown.delay(80).duration(480).springify().damping(18)}
+      style={styles.featureList}
+    >
+      {labels.map((label, index) => (
+        <View
+          key={label}
+          style={[
+            styles.featureRow,
+            rtlRow(isRTL),
+            index < labels.length - 1 ? styles.featureRowBorder : null,
+          ]}
+        >
+          <View style={styles.featureIcon}>
+            <Ionicons name="checkmark" size={14} color={accent} />
+          </View>
           <Text style={[styles.featureText, isRTL ? styles.featureTextRtl : null]}>{label}</Text>
         </View>
       ))}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -113,16 +129,29 @@ function PaywallPriceBlock({
   styles,
   subscriptionLabel,
   price,
+  hasTrial,
+  trialLabel,
 }: {
   styles: PaywallStyles;
   subscriptionLabel: string;
   price: string;
+  hasTrial: boolean;
+  trialLabel: string;
 }) {
   return (
-    <View style={styles.priceBlock}>
-      <Text style={styles.subscriptionLength}>{subscriptionLabel}</Text>
+    <Animated.View
+      entering={FadeInDown.delay(140).duration(480).springify().damping(18)}
+      style={styles.priceCard}
+    >
+      <View style={styles.priceCardTop}>
+        <View style={styles.priceCardCopy}>
+          <Text style={styles.subscriptionLength}>{subscriptionLabel}</Text>
+          {hasTrial ? <Text style={styles.trialChip}>{trialLabel}</Text> : null}
+        </View>
+        <View style={styles.priceSelectedDot} />
+      </View>
       <Text style={styles.price}>{price}</Text>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -144,38 +173,40 @@ function PaywallLegalFooter({
   termsLabel: string;
 }) {
   return (
-    <>
+    <View style={styles.legalWrap}>
       <Text style={styles.paywallLegal}>{legalText}</Text>
       <View style={[styles.paywallLegalLinksRow, rtlRow(isRTL)]}>
         <Pressable onPress={onPrivacy} hitSlop={8}>
           <Text style={styles.paywallLegalLink}>{privacyLabel}</Text>
         </Pressable>
-        <Text style={styles.paywallLegalLinkSeparator}> · </Text>
         <Pressable onPress={onTerms} hitSlop={8}>
           <Text style={styles.paywallLegalLink}>{termsLabel}</Text>
         </Pressable>
       </View>
-    </>
+    </View>
   );
 }
 
 export default function PaywallScreen() {
   const colors = useColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const { isDark } = useTheme();
+  const styles = useMemo(() => createStyles(colors, isDark), [colors, isDark]);
 
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { t, locale, isRTL } = useLocale();
-  const { isDark } = useTheme();
   const { refresh } = useProStatus();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<"purchase" | "restore" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [packageToBuy, setPackageToBuy] = useState<PurchasesPackage | null>(null);
-  const priceLabel = useMemo(
-    () => formatPaywallPriceLabel(locale, t("perMonth")),
-    [locale, t]
-  );
+  const priceLabel = useMemo(() => {
+    const storePrice = packageToBuy?.product?.priceString?.trim();
+    if (storePrice) {
+      return `${storePrice}${t("perMonth")}`;
+    }
+    return formatPaywallPriceLabel(locale, t("perMonth"));
+  }, [locale, packageToBuy, t]);
   const hasTrial = useMemo(() => {
     const introPrice = packageToBuy?.product?.introPrice;
     return introPrice?.price === 0;
@@ -195,15 +226,6 @@ export default function PaywallScreen() {
   const close = useCallback(() => {
     safeRouterBack(router);
   }, [router]);
-
-  const closeButtonStyle = useMemo(
-    () => [
-      styles.closeButton,
-      { top: insets.top },
-      isRTL ? { left: spacing.lg, right: undefined } : { right: spacing.lg, left: undefined },
-    ],
-    [styles.closeButton, insets.top, isRTL]
-  );
 
   const loadOffering = useCallback(async () => {
     if (Platform.OS === "web") {
@@ -261,7 +283,7 @@ export default function PaywallScreen() {
     } finally {
       setBusy(null);
     }
-  }, [packageToBuy, refresh, router]);
+  }, [packageToBuy, refresh]);
 
   const onRestore = useCallback(async () => {
     if (Platform.OS === "web") {
@@ -269,10 +291,18 @@ export default function PaywallScreen() {
     }
     setBusy("restore");
     try {
-      await Purchases.restorePurchases();
+      const info = await Purchases.restorePurchases();
       await refresh();
       void trackEvent("paywall_restore");
-      setShowRestoreSuccessAlert(true);
+      const isNowPro =
+        typeof info.entitlements?.active?.[REVENUECAT_UNLIMITED_ENTITLEMENT_ID] !== "undefined";
+      if (isNowPro) {
+        setShowRestoreSuccessAlert(true);
+      } else {
+        const storeLabel = Platform.OS === "android" ? t("googleAccount") : t("appleId");
+        setRestoreFailedMessage(t("noPurchasesForAccount", { account: storeLabel }));
+        setShowRestoreFailedAlert(true);
+      }
     } catch {
       const storeLabel = Platform.OS === "android" ? t("googleAccount") : t("appleId");
       setRestoreFailedMessage(t("noPurchasesForAccount", { account: storeLabel }));
@@ -308,17 +338,12 @@ export default function PaywallScreen() {
       return null;
     }
     return (
-      <>
-        {hasTrial ? (
-          <View style={styles.freeTrialBlock}>
-            <Text style={styles.freeTrialLabel}>{t("freeTrialLabel")}</Text>
-            <Text style={styles.freeTrialFinePrint}>{t("freeTrialFinePrint")}</Text>
-          </View>
-        ) : null}
+      <Animated.View entering={FadeIn.delay(200).duration(400)} style={styles.ctaStack}>
+        {hasTrial ? <Text style={styles.freeTrialFinePrint}>{t("freeTrialFinePrint")}</Text> : null}
         <Pressable
           onPress={() => void onSubscribe()}
           disabled={busy !== null}
-          style={({ pressed }) => [styles.ctaFull, pressed && styles.pressed, busy !== null && styles.disabled]}
+          style={({ pressed }) => [styles.ctaFull, pressed && styles.ctaPressed, busy !== null && styles.disabled]}
         >
           {busy === "purchase" ? (
             <ActivityIndicator color={colors.pillActiveText} />
@@ -337,9 +362,40 @@ export default function PaywallScreen() {
             <Text style={styles.restoreLinkText}>{t("restorePurchases")}</Text>
           )}
         </Pressable>
-      </>
+      </Animated.View>
     );
   };
+
+  const closeControl = (
+    <Pressable
+      onPress={close}
+      accessibilityRole="button"
+      accessibilityLabel={t("close")}
+      style={[
+        styles.closeButton,
+        { top: insets.top + spacing.xs },
+        isRTL ? { left: spacing.lg, right: undefined } : { right: spacing.lg, left: undefined },
+      ]}
+      hitSlop={8}
+    >
+      <View style={styles.closeDisk}>
+        <Ionicons name="close" size={18} color={colors.textPrimary} />
+      </View>
+    </Pressable>
+  );
+
+  const heroAndFeatures = (
+    <>
+      <PaywallHero
+        styles={styles}
+        title={t("nudgrrUnlimited")}
+        subtitle={t("getTheFullExperience")}
+        badge={t("paywallHeroBadge")}
+      />
+      <PaywallFeatureList styles={styles} labels={featureLabels} isRTL={isRTL} accent={colors.accent} />
+      <Text style={styles.brandFootnote}>{t("paywallFeatureRemoveBranding")}</Text>
+    </>
+  );
 
   if (Platform.OS === "web") {
     const openAppStore = () => {
@@ -348,36 +404,24 @@ export default function PaywallScreen() {
     };
 
     return (
-      <View style={[styles.screen, styles.webPaywallRoot, { paddingTop: insets.top }]}>
+      <View style={[styles.screen, { paddingTop: insets.top }]}>
         <StatusBar style={isDark ? "light" : "dark"} />
-        <Pressable
-          onPress={close}
-          accessibilityRole="button"
-          accessibilityLabel={t("close")}
-          style={closeButtonStyle}
-        >
-          <Text style={styles.closeMark}>✕</Text>
-        </Pressable>
+        {closeControl}
         <ScrollView
-          style={styles.webPaywallScroll}
+          style={styles.flex}
           contentContainerStyle={[
             styles.scroll,
-            styles.webScrollContent,
+            styles.scrollContent,
             { paddingBottom: insets.bottom + spacing.xl },
           ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.contentBlock}>
-            <PaywallHero
-              styles={styles}
-              title={t("nudgrrUnlimited")}
-              subtitle={t("getTheFullExperience")}
-            />
-            <PaywallFeatureList styles={styles} labels={featureLabels} isRTL={isRTL} />
+            {heroAndFeatures}
             <Pressable
               onPress={openAppStore}
-              style={({ pressed }) => [styles.ctaFull, pressed && styles.pressed]}
+              style={({ pressed }) => [styles.ctaFull, pressed && styles.ctaPressed]}
               accessibilityRole="link"
               accessibilityLabel={t("unlockNudgrr")}
             >
@@ -393,35 +437,26 @@ export default function PaywallScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <StatusBar style={isDark ? "light" : "dark"} />
-      <Pressable
-        onPress={close}
-        accessibilityRole="button"
-        accessibilityLabel={t("close")}
-        style={closeButtonStyle}
-      >
-        <Text style={styles.closeMark}>✕</Text>
-      </Pressable>
+      {closeControl}
       <ScrollView
+        style={styles.flex}
         contentContainerStyle={[
           styles.scroll,
           styles.scrollContent,
-          { paddingBottom: insets.bottom + spacing.xl },
+          { paddingBottom: insets.bottom + spacing.xxl },
         ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.contentBlock}>
-          <PaywallHero
-            styles={styles}
-            title={t("nudgrrUnlimited")}
-            subtitle={t("getTheFullExperience")}
-          />
-          <PaywallFeatureList styles={styles} labels={featureLabels} isRTL={isRTL} />
+          {heroAndFeatures}
           {!loading && !error && packageToBuy ? (
             <PaywallPriceBlock
               styles={styles}
               subscriptionLabel={t("oneMonthSubscription")}
               price={priceLabel}
+              hasTrial={hasTrial}
+              trialLabel={t("freeTrialLabel")}
             />
           ) : null}
           {renderPurchaseActions()}
@@ -460,7 +495,7 @@ export default function PaywallScreen() {
             <View style={styles.legalModalHeaderSpacer} />
           </View>
           <ScrollView
-            style={styles.legalModalScroll}
+            style={styles.flex}
             contentContainerStyle={[
               styles.legalModalContent,
               { paddingBottom: insets.bottom + spacing.xl },
@@ -482,7 +517,9 @@ export default function PaywallScreen() {
                 </Text>
               )
             ) : (
-              <Text style={styles.legalModalBody}>{PRIVACY_POLICY_BODY}</Text>
+              <Text style={styles.legalModalBody}>
+                {Platform.OS === "android" ? PRIVACY_POLICY_BODY_ANDROID : PRIVACY_POLICY_BODY_IOS}
+              </Text>
             )}
           </ScrollView>
         </View>
@@ -535,13 +572,14 @@ export default function PaywallScreen() {
   );
 }
 
-function createStyles(colors: AppColors) {
-  const accentMuted = `${colors.accent}22`;
-
+function createStyles(colors: AppColors, isDark: boolean) {
   return StyleSheet.create({
     screen: {
       flex: 1,
       backgroundColor: colors.background,
+    },
+    flex: {
+      flex: 1,
     },
     scroll: {
       paddingHorizontal: spacing.lg,
@@ -549,128 +587,198 @@ function createStyles(colors: AppColors) {
     scrollContent: {
       flexGrow: 1,
       justifyContent: "center",
-      paddingTop: spacing.xxl,
-    },
-    webPaywallRoot: {
-      flex: 1,
-    },
-    webPaywallScroll: {
-      flex: 1,
-    },
-    webScrollContent: {
-      flexGrow: 1,
-      justifyContent: "center",
+      paddingTop: spacing.xxl + spacing.md,
     },
     contentBlock: {
       width: "100%",
-      maxWidth: 420,
+      maxWidth: 400,
       alignSelf: "center",
       gap: spacing.lg,
     },
     closeButton: {
       position: "absolute",
       zIndex: 2,
-      minWidth: 44,
-      minHeight: 44,
-      justifyContent: "center",
-      alignItems: "center",
     },
-    closeMark: {
-      ...typography.resultSecondary,
-      color: colors.accent,
-      fontSize: 22,
+    closeDisk: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(22,24,28,0.06)",
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
     },
     heroSection: {
       alignItems: "center",
-      gap: spacing.md,
-      marginBottom: spacing.xs,
+      gap: spacing.sm,
+      paddingTop: spacing.sm,
     },
-    heroFrame: {
-      width: "100%",
-      borderWidth: 2,
-      borderColor: colors.accent,
-      borderRadius: radii.lg,
-      paddingVertical: spacing.xl,
-      paddingHorizontal: spacing.lg,
-      backgroundColor: accentMuted,
+    markDisk: {
+      width: 64,
+      height: 64,
+      borderRadius: 22,
       alignItems: "center",
       justifyContent: "center",
+      backgroundColor: colors.accent,
+      marginBottom: spacing.xs,
+      ...Platform.select({
+        ios: {
+          shadowColor: colors.accent,
+          shadowOpacity: isDark ? 0.35 : 0.28,
+          shadowRadius: 18,
+          shadowOffset: { width: 0, height: 10 },
+        },
+        android: { elevation: 6 },
+        default: {},
+      }),
     },
-    heroTitle: {
-      ...typography.resultPrimary,
-      fontSize: 32,
-      lineHeight: 38,
-      color: colors.textPrimary,
-      textAlign: "center",
+    markGlyph: {
+      fontFamily: fonts.bodyBold,
+      fontSize: 28,
+      lineHeight: 32,
+      color: colors.pillActiveText,
+      marginTop: -2,
     },
-    heroSubtitle: {
+    heroEyebrow: {
       ...typography.label,
       color: colors.accent,
-      textAlign: "center",
+      letterSpacing: 1.2,
+      textTransform: "uppercase",
+      fontSize: 11,
     },
-    featureCard: {
+    heroTitle: {
+      fontFamily: fonts.bodyBold,
+      fontSize: 36,
+      lineHeight: 40,
+      letterSpacing: -1.1,
+      color: colors.textPrimary,
+      textAlign: "center",
+      paddingHorizontal: spacing.sm,
+    },
+    heroSubtitle: {
+      ...typography.body,
+      color: colors.textSecondary,
+      textAlign: "center",
+      lineHeight: 23,
+      paddingHorizontal: spacing.md,
+      maxWidth: 320,
+    },
+    featureList: {
       width: "100%",
-      gap: spacing.sm,
-      paddingVertical: spacing.sm,
+      borderRadius: radii.xl,
+      backgroundColor: isDark ? "rgba(255,255,255,0.04)" : colors.surface,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      paddingHorizontal: spacing.md,
+      overflow: "hidden",
     },
     featureRow: {
       flexDirection: "row",
-      alignItems: "flex-start",
-      gap: spacing.sm,
+      alignItems: "center",
+      gap: spacing.md,
+      paddingVertical: 14,
     },
-    featureCheck: {
-      fontFamily: fonts.mono,
-      fontSize: 18,
-      lineHeight: 24,
-      color: colors.accent,
-      minWidth: 22,
-      textAlign: "center",
+    featureRowBorder: {
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.border,
+    },
+    featureIcon: {
+      width: 28,
+      height: 28,
+      borderRadius: 10,
+      backgroundColor: colors.accentSoft,
+      alignItems: "center",
+      justifyContent: "center",
     },
     featureText: {
       ...typography.body,
       flex: 1,
       fontFamily: fonts.bodySemiBold,
       color: colors.textPrimary,
-      lineHeight: 24,
+      lineHeight: 21,
+      fontSize: 15,
       textAlign: "left",
     },
     featureTextRtl: {
       textAlign: "right",
     },
-    priceBlock: {
-      width: "100%",
-      alignItems: "center",
-      gap: spacing.xs,
-      paddingVertical: spacing.lg,
+    brandFootnote: {
+      ...typography.badge,
+      color: colors.textSecondary,
+      textAlign: "center",
+      lineHeight: 18,
       paddingHorizontal: spacing.md,
-      borderWidth: 2,
+      marginTop: -spacing.sm,
+      opacity: 0.9,
+    },
+    priceCard: {
+      width: "100%",
+      borderRadius: radii.xl,
+      paddingVertical: spacing.lg,
+      paddingHorizontal: spacing.lg,
+      backgroundColor: colors.surface,
+      borderWidth: 1.5,
       borderColor: colors.accent,
-      borderRadius: radii.lg,
-      backgroundColor: accentMuted,
+      gap: spacing.sm,
+      ...Platform.select({
+        ios: {
+          shadowColor: colors.accent,
+          shadowOpacity: isDark ? 0.22 : 0.12,
+          shadowRadius: 16,
+          shadowOffset: { width: 0, height: 8 },
+        },
+        android: { elevation: 3 },
+        default: {},
+      }),
+    },
+    priceCardTop: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: spacing.md,
+    },
+    priceCardCopy: {
+      flex: 1,
+      gap: 8,
     },
     subscriptionLength: {
       ...typography.label,
-      color: colors.accent,
-      textAlign: "center",
+      color: colors.textSecondary,
+      letterSpacing: 0.4,
+      textTransform: "uppercase",
+      fontSize: 11,
     },
-    price: {
-      fontFamily: fonts.mono,
-      fontSize: 40,
-      lineHeight: 46,
-      letterSpacing: -1,
-      color: colors.accent,
-      textAlign: "center",
-    },
-    freeTrialBlock: {
-      marginTop: spacing.xs,
-      paddingHorizontal: spacing.sm,
-      gap: 6,
-    },
-    freeTrialLabel: {
-      ...typography.body,
+    trialChip: {
+      alignSelf: "flex-start",
+      ...typography.badge,
       fontFamily: fonts.bodySemiBold,
       color: colors.accent,
-      textAlign: "center",
+      backgroundColor: colors.accentSoft,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: radii.pill,
+      overflow: "hidden",
+    },
+    priceSelectedDot: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      borderWidth: 6,
+      borderColor: colors.accent,
+      backgroundColor: colors.surface,
+      marginTop: 2,
+    },
+    price: {
+      fontFamily: fonts.bodyBold,
+      fontSize: 34,
+      lineHeight: 40,
+      letterSpacing: -0.8,
+      color: colors.textPrimary,
+    },
+    ctaStack: {
+      width: "100%",
+      gap: spacing.sm,
     },
     freeTrialFinePrint: {
       ...typography.badge,
@@ -679,6 +787,7 @@ function createStyles(colors: AppColors) {
       color: colors.textSecondary,
       textAlign: "center",
       opacity: 0.92,
+      paddingHorizontal: spacing.sm,
     },
     blockCompact: {
       gap: spacing.md,
@@ -705,53 +814,67 @@ function createStyles(colors: AppColors) {
     },
     ctaFull: {
       width: "100%",
-      minHeight: touchTarget.min,
+      minHeight: 54,
       borderRadius: radii.pill,
       backgroundColor: colors.accent,
       alignItems: "center",
       justifyContent: "center",
-      marginTop: spacing.xs,
+      ...Platform.select({
+        ios: {
+          shadowColor: colors.accent,
+          shadowOpacity: isDark ? 0.4 : 0.3,
+          shadowRadius: 14,
+          shadowOffset: { width: 0, height: 8 },
+        },
+        android: { elevation: 4 },
+        default: {},
+      }),
+    },
+    ctaPressed: {
+      opacity: 0.92,
+      transform: [{ scale: 0.985 }],
     },
     ctaFullText: {
       ...typography.body,
-      fontFamily: fonts.bodySemiBold,
+      fontFamily: fonts.bodyBold,
       color: colors.pillActiveText,
       fontSize: 16,
-      letterSpacing: 0.2,
+      letterSpacing: 0.15,
     },
     restoreLink: {
       alignSelf: "center",
-      paddingVertical: spacing.md,
+      paddingVertical: spacing.sm,
       minHeight: 44,
       justifyContent: "center",
     },
     restoreLinkText: {
       ...typography.badge,
       color: colors.textSecondary,
-      textDecorationLine: "underline",
+      fontFamily: fonts.bodySemiBold,
+    },
+    legalWrap: {
+      gap: spacing.sm,
+      marginTop: spacing.xs,
     },
     paywallLegal: {
       ...typography.badge,
       color: colors.textSecondary,
       textAlign: "center",
-      opacity: 0.88,
-      marginTop: spacing.sm,
+      opacity: 0.8,
+      lineHeight: 16,
       paddingHorizontal: spacing.sm,
     },
     paywallLegalLinksRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
+      gap: spacing.md,
       paddingHorizontal: spacing.sm,
     },
     paywallLegalLink: {
       ...typography.badge,
       color: colors.accent,
-      textDecorationLine: "underline",
-    },
-    paywallLegalLinkSeparator: {
-      ...typography.badge,
-      color: colors.textSecondary,
+      fontFamily: fonts.bodySemiBold,
     },
     legalModalScreen: {
       flex: 1,
@@ -767,7 +890,7 @@ function createStyles(colors: AppColors) {
       borderBottomColor: colors.border,
     },
     legalModalBack: { minWidth: 56, minHeight: 44, justifyContent: "center" },
-    legalModalBackText: { ...typography.body, color: colors.accent, fontWeight: "700" },
+    legalModalBackText: { ...typography.body, color: colors.accent, fontFamily: fonts.bodyBold },
     legalModalTitle: {
       ...typography.body,
       fontFamily: fonts.bodyBold,
@@ -776,7 +899,6 @@ function createStyles(colors: AppColors) {
       textAlign: "center",
     },
     legalModalHeaderSpacer: { minWidth: 56 },
-    legalModalScroll: { flex: 1 },
     legalModalContent: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
     legalModalBody: {
       ...typography.badge,

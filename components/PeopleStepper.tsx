@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
-import * as Haptics from "expo-haptics";
+import * as Haptics from "../lib/appHaptics";
 import { fonts, radii, spacing, touchTarget, typography, type AppColors } from "../constants/theme";
 import { useLocale } from "../hooks/useLocale";
 import { useColors } from "../hooks/useColors";

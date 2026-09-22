@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Dimensions,
   Image,
   Modal,
@@ -13,9 +14,11 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { Pressable, Swipeable } from "react-native-gesture-handler";
+import { Pressable } from "react-native-gesture-handler";
+import { RoundedSwipeRow } from "./RoundedSwipeRow";
+import { Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
-import * as Haptics from "expo-haptics";
+import * as Haptics from "../lib/appHaptics";
 import * as Sharing from "expo-sharing";
 import { shareReceiptImage } from "../lib/shareReceiptImage";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
@@ -24,12 +27,15 @@ import ViewShot, { captureRef } from "react-native-view-shot";
 
 import { AppAlert } from "./AppAlert";
 import { ProLockedBlurOverlay } from "./ProLockedBlurOverlay";
-import { getLocalizedToneOptions } from "../constants/messages";
 import { OverdueReceiptCard } from "./OverdueReceiptCard";
 import { ProjectOverdueReceiptCard } from "./ProjectOverdueReceiptCard";
+import { StoryDebtCard } from "./StoryDebtCard";
+import { SwipeDeleteAction } from "./SwipeDeleteAction";
 import type { NudgeTone } from "../constants/messages";
 import { fonts, radii, spacing, touchTarget, typography, type AppColors } from "../constants/theme";
 import { useAppPreferences } from "../hooks/useAppPreferences";
+import { useEscalationAlerts } from "../hooks/useEscalationAlerts";
+import { useOverdueNotifications } from "../hooks/useOverdueNotifications";
 import { useReceiptFooter } from "../hooks/useReceiptFooter";
 import { useLocale } from "../hooks/useLocale";
 import { useColors } from "../hooks/useColors";
@@ -40,8 +46,15 @@ import { useSplitHistory } from "../hooks/useSplitHistory";
 import type { ProjectWaitingEntry } from "../hooks/useProjects";
 import { useNudgeQuota } from "../hooks/useNudgeQuota";
 import { getUnpaidProjectDebts, useProjects } from "../hooks/useProjects";
+import {
+  escalationLabelKey,
+  getEscalationTier,
+} from "../lib/escalation";
 import { buildProjectReminderMessage } from "../lib/projectReminders";
 import { formatCurrency } from "../lib/currency";
+import { sumByCurrency } from "../lib/moneyByCurrency";
+import { MoneyByCurrency } from "./MoneyByCurrency";
+import { categoryMeta } from "../lib/categories";
 import { formatDateMedium } from "../lib/i18n";
 import {
   computeReceiptPreviewLayout,
@@ -53,15 +66,17 @@ import { trackDaysWaiting } from "../lib/oneSignal";
 import { safeRouterBack } from "../lib/safeRouterBack";
 
 const MS_PER_DAY = 86_400_000;
-const FREE_UNPAID_LIMIT = 2;
+const FREE_UNPAID_LIMIT = 3;
 
 type WaitingListItem =
   | { kind: "split"; record: SplitRecord }
   | { kind: "project"; entry: ProjectWaitingEntry };
 
+type CaptureFormat = "receipt" | "story";
+
 type ReminderCaptureTarget =
-  | { kind: "split"; record: SplitRecord }
-  | { kind: "project"; entry: ProjectWaitingEntry };
+  | { kind: "split"; record: SplitRecord; format: CaptureFormat }
+  | { kind: "project"; entry: ProjectWaitingEntry; format: CaptureFormat };
 
 function projectSentAtMillis(entry: ProjectWaitingEntry): number {
   return Date.parse(entry.closedAt) || Date.now();
@@ -71,12 +86,6 @@ function daysWaitingProject(entry: ProjectWaitingEntry): number {
   const diff = Date.now() - projectSentAtMillis(entry);
   return Math.max(0, Math.floor(diff / MS_PER_DAY));
 }
-
-type VibeTier = {
-  emoji: string;
-  tintBg: string;
-  tintBorder: string;
-};
 
 function sentAtMillis(record: SplitRecord): number {
   const iso = typeof record.nudgeSentAt === "string" ? record.nudgeSentAt.trim() : "";
@@ -95,50 +104,8 @@ function daysWaiting(record: SplitRecord): number {
   return Math.max(0, Math.floor(diff / MS_PER_DAY));
 }
 
-function vibeTierForDays(days: number): VibeTier {
-  if (days <= 3) {
-    return {
-      emoji: "😎",
-      tintBg: "rgba(34, 139, 34, 0.12)",
-      tintBorder: "rgba(34, 139, 34, 0.55)",
-    };
-  }
-  if (days <= 7) {
-    return {
-      emoji: "😏",
-      tintBg: "rgba(217, 165, 43, 0.18)",
-      tintBorder: "rgba(184, 134, 11, 0.65)",
-    };
-  }
-  if (days <= 14) {
-    return {
-      emoji: "💼",
-      tintBg: "rgba(217, 119, 6, 0.16)",
-      tintBorder: "rgba(234, 88, 12, 0.55)",
-    };
-  }
-  return {
-    emoji: "🚨",
-    tintBg: "rgba(220, 38, 38, 0.14)",
-    tintBorder: "rgba(185, 28, 28, 0.6)",
-  };
-}
-
-function vibeLabelForDays(
-  days: number,
-  toneOptions: ReturnType<typeof getLocalizedToneOptions>,
-  t: (key: string) => string
-): string {
-  if (days <= 3) {
-    return toneOptions.find((o) => o.id === "casual")?.label ?? t("casual");
-  }
-  if (days <= 7) {
-    return toneOptions.find((o) => o.id === "passiveAggressive")?.label ?? t("passive");
-  }
-  if (days <= 14) {
-    return toneOptions.find((o) => o.id === "serious")?.label ?? t("serious");
-  }
-  return t("vibeNuclear");
+function vibeLabelForDays(days: number, t: (key: string) => string): string {
+  return t(escalationLabelKey(getEscalationTier(days)));
 }
 
 type Props = {
@@ -155,7 +122,7 @@ type Props = {
 export function TheWaitingGame({
   variant,
   headerTitle,
-  headerSubtitle,
+  headerSubtitle: _headerSubtitle,
   emptyTitle,
   emptyBody,
 }: Props) {
@@ -170,9 +137,9 @@ export function TheWaitingGame({
   const offscreenTop = Dimensions.get("window").height + 120;
 
   const { t, isRTL, locale } = useLocale();
-  const toneOptions = useMemo(() => getLocalizedToneOptions(t), [t]);
   const { isPro } = useProStatus();
-  const { currency, hideReceiptBranding, defaultTone } = useAppPreferences();
+  const { currency, hideReceiptBranding, defaultTone, paymentHint, overdueNotifications } =
+    useAppPreferences();
   const { footer } = useReceiptFooter();
   const { canSendFree, recordSend } = useNudgeQuota(isPro);
   const { items, loading, reload, markAsPaid, markNudgeSent, deleteRecord } = useSplitHistory();
@@ -184,6 +151,14 @@ export function TheWaitingGame({
     markProjectNudgeSent,
   } = useProjects();
   const [query, setQuery] = useState("");
+
+  useOverdueNotifications(overdueNotifications, items, projects, {
+    title: t("overduePushTitle"),
+    body: (name, days) => t("overduePushBody", { name, days }),
+  });
+
+  const storyWidth = useMemo(() => Math.min(Math.round(windowWidth * 0.72), 340), [windowWidth]);
+  const storyHeight = useMemo(() => Math.round((storyWidth * 16) / 9), [storyWidth]);
 
   const formatDaysSinceSent = useCallback(
     (days: number) => {
@@ -213,6 +188,7 @@ export function TheWaitingGame({
   const [showCaptureFailedAlert, setShowCaptureFailedAlert] = useState(false);
   const [showSharingUnavailableAlert, setShowSharingUnavailableAlert] = useState(false);
   const [showShareFailedAlert, setShowShareFailedAlert] = useState(false);
+  const [escalateFocusId, setEscalateFocusId] = useState<string | null>(null);
   const overdueShotRef = useRef<ViewShot | null>(null);
 
   const finishReminderSent = useCallback(
@@ -251,6 +227,10 @@ export function TheWaitingGame({
       return;
     }
     let cancelled = false;
+    const isStory = captureTarget.format === "story";
+    const exportWidth = isStory
+      ? Math.round(storyWidth * 2)
+      : getReceiptCaptureExportWidth(receiptWidth);
     const timer = setTimeout(async () => {
       try {
         await new Promise<void>((resolve) => {
@@ -259,7 +239,7 @@ export function TheWaitingGame({
         const uri = await captureRef(overdueShotRef, {
           format: "png",
           quality: 1,
-          width: getReceiptCaptureExportWidth(receiptWidth),
+          width: exportWidth,
         });
         if (cancelled) {
           return;
@@ -282,7 +262,9 @@ export function TheWaitingGame({
           }
           return;
         }
-        await shareReceiptImage(uri, { dialogTitle: t("secondNotice") });
+        await shareReceiptImage(uri, {
+          dialogTitle: isStory ? t("storyDropDialog") : t("secondNotice"),
+        });
         if (!cancelled) {
           await finishReminderSent(captureTarget);
           void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -302,7 +284,7 @@ export function TheWaitingGame({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [captureTarget, finishReminderSent, isPro, receiptWidth, t]);
+  }, [captureTarget, finishReminderSent, isPro, receiptWidth, storyWidth, t]);
 
   const dismissReminderPreview = useCallback(() => {
     setReminderPreview(null);
@@ -314,7 +296,10 @@ export function TheWaitingGame({
     }
     setReminderShareBusy(true);
     try {
-      await shareReceiptImage(reminderPreview.uri, { dialogTitle: t("secondNotice") });
+      const isStory = reminderPreview.target.format === "story";
+      await shareReceiptImage(reminderPreview.uri, {
+        dialogTitle: isStory ? t("storyDropDialog") : t("secondNotice"),
+      });
       await finishReminderSent(reminderPreview.target);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
@@ -362,7 +347,18 @@ export function TheWaitingGame({
     if (!q) {
       return items;
     }
-    return items.filter((r) => r.restaurant.toLowerCase().includes(q));
+    return items.filter((r) => {
+      const restaurant = r.restaurant.toLowerCase();
+      const person = (r.linkedPersonName ?? "").toLowerCase();
+      const category = (r.category ?? "").toLowerCase();
+      const shareHit = (r.shares ?? []).some((s) => s.name.toLowerCase().includes(q));
+      return (
+        restaurant.includes(q) ||
+        person.includes(q) ||
+        category.includes(q) ||
+        shareHit
+      );
+    });
   }, [items, query]);
 
   const filteredProjectDebts = useMemo(() => {
@@ -439,28 +435,57 @@ export function TheWaitingGame({
 
   const waitingSummary = useMemo(() => {
     let count = 0;
-    let total = 0;
     let maxDays = 0;
-    let summaryCurrency = currency;
+    const moneyLines: { amount: number; currency: string }[] = [];
     for (const row of unpaid) {
       count += 1;
       const days = row.kind === "split" ? daysWaiting(row.record) : daysWaitingProject(row.entry);
       maxDays = Math.max(maxDays, days);
       if (row.kind === "split") {
-        total += row.record.totalPerPerson;
-        if (summaryCurrency === currency && row.record.currency) {
-          summaryCurrency = row.record.currency;
-        }
+        moneyLines.push({
+          amount: row.record.totalPerPerson,
+          currency: row.record.currency ?? currency,
+        });
       } else {
-        total += row.entry.amount;
+        moneyLines.push({
+          amount: row.entry.amount,
+          currency: currency,
+        });
       }
     }
-    return { count, total, maxDays, summaryCurrency };
+    const amounts = sumByCurrency(moneyLines, {
+      preferredCurrency: currency,
+      fallbackCurrency: currency,
+    });
+    return { count, maxDays, amounts };
   }, [currency, unpaid]);
 
-  const summaryVibe = useMemo(
-    () => (waitingSummary.maxDays > 0 ? vibeTierForDays(waitingSummary.maxDays) : null),
-    [waitingSummary.maxDays]
+  const escalationCandidates = useMemo(
+    () =>
+      unpaid.map((row) => {
+        if (row.kind === "split") {
+          const days = daysWaiting(row.record);
+          return {
+            id: row.record.id,
+            name: row.record.restaurant.trim() || t("dinner"),
+            days,
+            tier: getEscalationTier(days),
+          };
+        }
+        const days = daysWaitingProject(row.entry);
+        return {
+          id: row.entry.transferId,
+          name: row.entry.participantName,
+          days,
+          tier: getEscalationTier(days),
+        };
+      }),
+    [t, unpaid]
+  );
+
+  const { alert: escalationAlert, dismiss: dismissEscalationAlert } = useEscalationAlerts(
+    escalationCandidates,
+    !loading && !projectsLoading && unpaid.length > 0
   );
 
   const bottomPad = variant === "tab" ? Math.max(insets.bottom, spacing.sm) + 88 : insets.bottom + spacing.xxl;
@@ -497,7 +522,6 @@ export function TheWaitingGame({
       if (item.kind === "project") {
         const entry = item.entry;
         const waitingDays = daysWaitingProject(entry);
-        const vibe = vibeTierForDays(waitingDays);
         const unpaidIndex = unpaid.findIndex(
           (r) => r.kind === "project" && r.entry.transferId === entry.transferId
         );
@@ -505,14 +529,7 @@ export function TheWaitingGame({
         const reminderBusy = !!reminderPreview || !!captureTarget;
 
         const card = (
-          <View
-            style={[
-              styles.card,
-              isLocked && styles.cardLocked,
-              { backgroundColor: vibe.tintBg, borderColor: vibe.tintBorder },
-            ]}
-          >
-            <View style={[styles.cardAccent, { backgroundColor: vibe.tintBorder }]} />
+          <View style={[styles.card, isLocked && styles.cardLocked]}>
             <Pressable
               onPress={() => {
                 if (!isLocked) {
@@ -531,14 +548,9 @@ export function TheWaitingGame({
                     {entry.projectName}
                   </Text>
                 </View>
-                <View style={[styles.vibePill, rtlRow(isRTL), { borderColor: vibe.tintBorder }]}>
-                  <View style={[styles.vibeEmojiWrap, { backgroundColor: vibe.tintBg }]}>
-                    <Text style={styles.vibeEmoji}>{vibe.emoji}</Text>
-                  </View>
-                  <Text style={styles.vibeLabel} numberOfLines={2}>
-                    {vibeLabelForDays(waitingDays, toneOptions, t)}
-                  </Text>
-                </View>
+                <Text style={styles.statusLabel} numberOfLines={2}>
+                  {vibeLabelForDays(waitingDays, t)}
+                </Text>
               </View>
               <Text style={styles.amountLine}>{formatCurrency(entry.amount, currency)}</Text>
               <View style={[styles.metaRow, rtlRow(isRTL)]}>
@@ -553,32 +565,50 @@ export function TheWaitingGame({
               </View>
             </Pressable>
             {!isLocked ? (
-              <View style={[styles.cardActions, rtlRow(isRTL)]}>
+              <View style={styles.cardActionsCol}>
+                <View style={[styles.cardActions, rtlRow(isRTL)]}>
+                  <Pressable
+                    onPress={() =>
+                      requestReminderImageShare({ kind: "project", entry, format: "receipt" })
+                    }
+                    disabled={reminderBusy}
+                    style={({ pressed }) => [
+                      styles.reminderPill,
+                      reminderBusy && styles.reminderPillDisabled,
+                      pressed && styles.reminderPillPressed,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={t("sendSecondNoticeImage")}
+                  >
+                    <Text style={styles.reminderPillText}>{t("sendReminder")}</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => {
+                      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                      void markSettlementPaid(entry.projectId, entry.transferId);
+                    }}
+                    style={({ pressed }) => [styles.receiveBtn, pressed && styles.receiveBtnPressed]}
+                    accessibilityRole="button"
+                    accessibilityLabel={t("markedReceivedPaid")}
+                  >
+                    <Text style={styles.receiveBtnText}>✓ {t("received")}</Text>
+                  </Pressable>
+                </View>
                 <Pressable
                   onPress={() =>
-                    requestReminderImageShare({ kind: "project", entry })
+                    requestReminderImageShare({ kind: "project", entry, format: "story" })
                   }
                   disabled={reminderBusy}
                   style={({ pressed }) => [
-                    styles.reminderPill,
+                    styles.escalatePill,
+                    escalateFocusId === entry.transferId && styles.escalatePillHot,
                     reminderBusy && styles.reminderPillDisabled,
                     pressed && styles.reminderPillPressed,
                   ]}
                   accessibilityRole="button"
-                  accessibilityLabel={t("sendSecondNoticeImage")}
+                  accessibilityLabel={t("shareStoryDrop")}
                 >
-                  <Text style={styles.reminderPillText}>🔔 {t("sendReminder")}</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => {
-                    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                    void markSettlementPaid(entry.projectId, entry.transferId);
-                  }}
-                  style={({ pressed }) => [styles.receiveBtn, pressed && styles.receiveBtnPressed]}
-                  accessibilityRole="button"
-                  accessibilityLabel={t("markedReceivedPaid")}
-                >
-                  <Text style={styles.receiveBtnText}>✓ {t("received")}</Text>
+                  <Text style={styles.escalatePillText}>{t("shareStoryDrop")}</Text>
                 </Pressable>
               </View>
             ) : null}
@@ -599,7 +629,6 @@ export function TheWaitingGame({
       const record = item.record;
       const settled = typeof record.paidAt === "string" && record.paidAt.trim().length > 0;
       const waitingDays = daysWaiting(record);
-      const vibe = settled ? null : vibeTierForDays(waitingDays);
       const code = record.currency ?? "USD";
       const name = record.restaurant.trim() || t("dinner");
       const unpaidIndex = unpaid.findIndex((r) => r.kind === "split" && r.record.id === record.id);
@@ -613,67 +642,51 @@ export function TheWaitingGame({
         router.push(`/history/${record.id}`);
       };
 
-      const renderRightActions = () => (
-        <Pressable
+      const renderRightActions = (
+        progress: Animated.AnimatedInterpolation<number>
+      ) => (
+        <SwipeDeleteAction
+          progress={progress}
+          label={t("delete")}
           onPress={() => {
             void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
             void deleteRecord(record.id);
           }}
-          style={styles.deleteAction}
-          accessibilityRole="button"
-          accessibilityLabel={t("delete")}
-        >
-          <Text style={styles.deleteActionText}>{t("delete")}</Text>
-        </Pressable>
+        />
       );
 
       const card = (
         <View
           style={[
             styles.card,
+            styles.cardInSwipe,
             isLocked && styles.cardLocked,
             settled && styles.cardSettled,
-            !settled &&
-              vibe && {
-                backgroundColor: vibe.tintBg,
-                borderColor: vibe.tintBorder,
-              },
           ]}
         >
-          {!settled && vibe ? (
-            <View style={[styles.cardAccent, { backgroundColor: vibe.tintBorder }]} />
-          ) : null}
           <Pressable onPress={openDetail} style={styles.cardBody} disabled={isLocked}>
             <View style={[styles.cardTop, rtlRow(isRTL)]}>
               <Text style={[styles.restaurant, settled && styles.mutedStrong]} numberOfLines={2}>
                 {name}
               </Text>
               {settled ? (
-                <View style={styles.donePill}>
-                  <Text style={styles.doneMark} accessibilityLabel={t("paid")}>
-                    ✅
-                  </Text>
-                </View>
+                <Text style={styles.statusLabelMuted} accessibilityLabel={t("paid")}>
+                  {t("paid")}
+                </Text>
               ) : (
-                vibe && (
-                  <View style={[styles.vibePill, rtlRow(isRTL), { borderColor: vibe.tintBorder }]}>
-                    <View style={[styles.vibeEmojiWrap, { backgroundColor: vibe.tintBg }]}>
-                      <Text style={styles.vibeEmoji}>{vibe.emoji}</Text>
-                    </View>
-                    <Text style={styles.vibeLabel} numberOfLines={2}>
-                      {vibeLabelForDays(waitingDays, toneOptions, t)}
-                    </Text>
-                  </View>
-                )
+                <Text style={styles.statusLabel} numberOfLines={2}>
+                  {vibeLabelForDays(waitingDays, t)}
+                </Text>
               )}
             </View>
             <Text style={[styles.amountLine, settled && styles.mutedStrong]}>
               {formatCurrency(record.totalPerPerson, code)}
               {t("perPersonSuffix")}
+              {record.category ? `, ${t(categoryMeta(record.category).labelKey)}` : ""}
             </Text>
             {settled ? (
               <Text style={[styles.daysLine, styles.muted]}>
-                {record.paidAt ? `${t("paid")} · ${paidDateLabel(record.paidAt)}` : t("paid")}
+                {record.paidAt ? `${t("paid")}, ${paidDateLabel(record.paidAt)}` : t("paid")}
               </Text>
             ) : (
               <View style={[styles.metaRow, rtlRow(isRTL)]}>
@@ -690,30 +703,50 @@ export function TheWaitingGame({
           </Pressable>
 
           {!settled && !isLocked ? (
-            <View style={[styles.cardActions, rtlRow(isRTL)]}>
+            <View style={styles.cardActionsCol}>
+              <View style={[styles.cardActions, rtlRow(isRTL)]}>
+                <Pressable
+                  onPress={() =>
+                    requestReminderImageShare({ kind: "split", record, format: "receipt" })
+                  }
+                  disabled={!!reminderPreview || !!captureTarget}
+                  style={({ pressed }) => [
+                    styles.reminderPill,
+                    (!!reminderPreview || !!captureTarget) && styles.reminderPillDisabled,
+                    pressed && styles.reminderPillPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("sendSecondNoticeImage")}
+                >
+                  <Text style={styles.reminderPillText}>{t("sendReminder")}</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    void markAsPaid(record.id);
+                  }}
+                  style={({ pressed }) => [styles.receiveBtn, pressed && styles.receiveBtnPressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("markedReceivedPaid")}
+                >
+                  <Text style={styles.receiveBtnText}>✓ {t("received")}</Text>
+                </Pressable>
+              </View>
               <Pressable
-                onPress={() => requestReminderImageShare({ kind: "split", record })}
+                onPress={() =>
+                  requestReminderImageShare({ kind: "split", record, format: "story" })
+                }
                 disabled={!!reminderPreview || !!captureTarget}
                 style={({ pressed }) => [
-                  styles.reminderPill,
+                  styles.escalatePill,
+                  escalateFocusId === record.id && styles.escalatePillHot,
                   (!!reminderPreview || !!captureTarget) && styles.reminderPillDisabled,
                   pressed && styles.reminderPillPressed,
                 ]}
                 accessibilityRole="button"
-                accessibilityLabel={t("sendSecondNoticeImage")}
+                accessibilityLabel={t("shareStoryDrop")}
               >
-                <Text style={styles.reminderPillText}>🔔 {t("sendReminder")}</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                  void markAsPaid(record.id);
-                }}
-                style={({ pressed }) => [styles.receiveBtn, pressed && styles.receiveBtnPressed]}
-                accessibilityRole="button"
-                accessibilityLabel={t("markedReceivedPaid")}
-              >
-                <Text style={styles.receiveBtnText}>✓ {t("received")}</Text>
+                <Text style={styles.escalatePillText}>{t("shareStoryDrop")}</Text>
               </Pressable>
             </View>
           ) : null}
@@ -735,15 +768,15 @@ export function TheWaitingGame({
       }
 
       return (
-        <Swipeable renderRightActions={renderRightActions} overshootRight={false} friction={2}>
+        <RoundedSwipeRow style={styles.swipeRow} renderRightActions={renderRightActions} overshootRight={false} friction={2} rightThreshold={40}>
           {card}
-        </Swipeable>
+        </RoundedSwipeRow>
       );
     },
     [
       captureTarget,
-      defaultTone,
       deleteRecord,
+      escalateFocusId,
       formatDaysSinceSent,
       isPro,
       isRTL,
@@ -753,15 +786,24 @@ export function TheWaitingGame({
       reminderPreview,
       requestReminderImageShare,
       router,
+      styles,
       t,
-      toneOptions,
       unpaid,
       currency,
     ]
   );
 
   return (
-    <View style={[styles.screen, isRTL && styles.rtlContainer, { paddingTop: Math.max(insets.top, spacing.lg) }]}>
+    <View
+      style={[
+        styles.screen,
+        isRTL && styles.rtlContainer,
+        {
+          paddingTop:
+            insets.top + (variant === "tab" ? spacing.lg : spacing.sm),
+        },
+      ]}
+    >
       <StatusBar style={reminderPreview ? "light" : isDark ? "light" : "dark"} />
       {variant === "stack" ? (
         <View style={[styles.stackHeader, rtlRow(isRTL)]}>
@@ -777,43 +819,37 @@ export function TheWaitingGame({
           <Text style={styles.screenTitle}>{headerTitle ?? t("theWaitingGame")}</Text>
           <View style={styles.headerSpacer} />
         </View>
-      ) : (
-        <View style={styles.tabHeader}>
-          <View style={styles.headerBadge}>
-            <Text style={styles.headerBadgeEmoji}>⏳</Text>
-          </View>
-          <Text style={styles.screenTitleCenter}>{headerTitle ?? t("theWaitingGame")}</Text>
-          <View style={styles.titleAccent} />
-          <Text style={styles.screenSub}>{headerSubtitle ?? t("waitingSubtitle")}</Text>
-        </View>
-      )}
+      ) : null}
 
       {!loading && !projectsLoading && waitingSummary.count > 0 ? (
-        <View
-          style={[
-            styles.summaryCard,
-            summaryVibe && {
-              borderColor: summaryVibe.tintBorder,
-              backgroundColor: summaryVibe.tintBg,
-            },
-          ]}
-        >
-          <View style={[styles.summaryTop, rtlRow(isRTL)]}>
-            <View style={styles.summaryStat}>
-              <Text style={styles.summaryStatValue}>{waitingSummary.count}</Text>
-              <Text style={styles.summaryStatLabel}>{t("stillUnpaid")}</Text>
+        <View style={styles.summaryCard}>
+          <MoneyByCurrency
+            amounts={waitingSummary.amounts}
+            size={waitingSummary.amounts.mixed ? "body" : "hero"}
+            align="center"
+            color={colors.accent}
+            mutedColor={colors.textSecondary}
+          />
+          <Text style={styles.summaryHeroLabel}>{t("waitingOwedLabel")}</Text>
+
+          <View style={[styles.summaryMeta, rtlRow(isRTL)]}>
+            <View style={styles.summaryMetaStat}>
+              <Text style={styles.summaryMetaValue}>{waitingSummary.count}</Text>
+              <Text style={styles.summaryMetaLabel}>{t("waitingOpenLabel")}</Text>
             </View>
-            <View style={styles.summaryDivider} />
-            <View style={styles.summaryStat}>
-              <Text style={[styles.summaryStatValue, styles.summaryAmount]}>
-                {formatCurrency(waitingSummary.total, waitingSummary.summaryCurrency)}
-              </Text>
-              <Text style={styles.summaryStatLabel}>{t("theLackTotal")}</Text>
-            </View>
-            {summaryVibe ? (
-              <View style={[styles.summaryVibe, { borderColor: summaryVibe.tintBorder }]}>
-                <Text style={styles.summaryVibeEmoji}>{summaryVibe.emoji}</Text>
-              </View>
+            {waitingSummary.maxDays > 0 ? (
+              <>
+                <View style={styles.summaryDivider} />
+                <View style={styles.summaryMetaStat}>
+                  <Text style={styles.summaryMetaValue}>
+                    {t("waitingLongestDays", { days: waitingSummary.maxDays })}
+                  </Text>
+                  <Text style={styles.summaryMetaLabel}>{t("waitingLongestLabel")}</Text>
+                  <Text style={styles.summaryMetaHint} numberOfLines={1}>
+                    {vibeLabelForDays(waitingSummary.maxDays, t)}
+                  </Text>
+                </View>
+              </>
             ) : null}
           </View>
         </View>
@@ -821,16 +857,16 @@ export function TheWaitingGame({
 
       <View style={[styles.searchWrap, variant === "stack" && styles.searchWrapStack]}>
         <View style={[styles.searchField, rtlRow(isRTL)]}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <Ionicons name="search-outline" size={18} color={colors.textSecondary} />
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder={t("searchRestaurant")}
+            placeholder={t("searchWaitingPlaceholder")}
             placeholderTextColor={colors.textSecondary}
             style={styles.searchInput}
             selectionColor={colors.accent}
             cursorColor={colors.accent}
-            accessibilityLabel={t("filterByRestaurant")}
+            accessibilityLabel={t("searchWaitingPlaceholder")}
           />
         </View>
       </View>
@@ -841,17 +877,11 @@ export function TheWaitingGame({
         </View>
       ) : items.length === 0 && filteredProjectDebts.length === 0 ? (
         <View style={styles.empty}>
-          <View style={styles.emptyBadge}>
-            <Text style={styles.emptyEmoji}>⏳</Text>
-          </View>
           <Text style={styles.emptyTitle}>{emptyTitle ?? t("nothingInQueue")}</Text>
           <Text style={styles.emptyBody}>{emptyBody ?? t("nothingInQueueBody")}</Text>
         </View>
       ) : filtered.length === 0 && filteredProjectDebts.length === 0 ? (
         <View style={styles.empty}>
-          <View style={styles.emptyBadge}>
-            <Text style={styles.emptyEmoji}>🔍</Text>
-          </View>
           <Text style={styles.emptyTitle}>{t("noMatches")}</Text>
           <Text style={styles.emptyBody}>{t("tryDifferentRestaurant")}</Text>
         </View>
@@ -880,15 +910,57 @@ export function TheWaitingGame({
       {captureTarget ? (
         <View
           pointerEvents="none"
-          style={[styles.offscreenShot, { top: offscreenTop, width: receiptWidth }]}
+          style={[
+            styles.offscreenShot,
+            {
+              top: offscreenTop,
+              width: captureTarget.format === "story" ? storyWidth : receiptWidth,
+            },
+          ]}
           collapsable={false}
         >
           <ViewShot
             ref={overdueShotRef}
             options={{ format: "png", quality: 1 }}
-            style={[styles.shotInner, { width: receiptWidth }]}
+            style={[
+              styles.shotInner,
+              {
+                width: captureTarget.format === "story" ? storyWidth : receiptWidth,
+                height: captureTarget.format === "story" ? storyHeight : undefined,
+              },
+            ]}
           >
-            {captureTarget.kind === "split" ? (
+            {captureTarget.format === "story" ? (
+              captureTarget.kind === "split" ? (
+                <StoryDebtCard
+                  width={storyWidth}
+                  title={
+                    (typeof captureTarget.record.linkedPersonName === "string" &&
+                    captureTarget.record.linkedPersonName.trim()
+                      ? captureTarget.record.linkedPersonName.trim()
+                      : captureTarget.record.restaurant.trim()) || t("dinner")
+                  }
+                  subtitle={captureTarget.record.restaurant.trim() || undefined}
+                  amountLabel={formatCurrency(
+                    captureTarget.record.totalPerPerson,
+                    captureTarget.record.currency ?? currency
+                  )}
+                  days={daysWaiting(captureTarget.record)}
+                  paymentHint={isPro ? paymentHint : ""}
+                  showBranding={!(isPro && hideReceiptBranding)}
+                />
+              ) : (
+                <StoryDebtCard
+                  width={storyWidth}
+                  title={captureTarget.entry.participantName}
+                  subtitle={captureTarget.entry.projectName}
+                  amountLabel={formatCurrency(captureTarget.entry.amount, currency)}
+                  days={daysWaitingProject(captureTarget.entry)}
+                  paymentHint={isPro ? paymentHint : ""}
+                  showBranding={!(isPro && hideReceiptBranding)}
+                />
+              )
+            ) : captureTarget.kind === "split" ? (
               <OverdueReceiptCard
                 width={receiptWidth}
                 record={captureTarget.record}
@@ -897,6 +969,7 @@ export function TheWaitingGame({
                 isPro={isPro}
                 hideReceiptBranding={hideReceiptBranding}
                 customFooter={footer}
+                paymentHint={paymentHint}
                 compact
               />
             ) : (
@@ -910,6 +983,7 @@ export function TheWaitingGame({
                 isPro={isPro}
                 hideReceiptBranding={hideReceiptBranding}
                 customFooter={footer}
+                paymentHint={paymentHint}
                 compact
               />
             )}
@@ -1058,6 +1132,61 @@ export function TheWaitingGame({
         onRequestClose={() => setShowQuotaAlert(false)}
         buttons={[{ text: t("ok"), onPress: () => setShowQuotaAlert(false) }]}
       />
+      <AppAlert
+        visible={escalationAlert !== null}
+        title={t("escalationAlertTitle")}
+        message={
+          escalationAlert
+            ? t("escalationAlertBody", {
+                name: escalationAlert.name,
+                days: escalationAlert.days,
+              })
+            : ""
+        }
+        onRequestClose={() => {
+          void dismissEscalationAlert(escalationAlert);
+        }}
+        buttons={[
+          {
+            text: t("escalationAlertLater"),
+            onPress: () => {
+              void dismissEscalationAlert(escalationAlert);
+            },
+          },
+          {
+            text: t("escalationAlertAction"),
+            onPress: () => {
+              const current = escalationAlert;
+              void dismissEscalationAlert(current);
+              if (!current) {
+                return;
+              }
+              setEscalateFocusId(current.id);
+              const match = unpaid.find((row) =>
+                row.kind === "split"
+                  ? row.record.id === current.id
+                  : row.entry.transferId === current.id
+              );
+              if (!match) {
+                return;
+              }
+              if (match.kind === "split") {
+                requestReminderImageShare({
+                  kind: "split",
+                  record: match.record,
+                  format: "story",
+                });
+              } else {
+                requestReminderImageShare({
+                  kind: "project",
+                  entry: match.entry,
+                  format: "story",
+                });
+              }
+            },
+          },
+        ]}
+      />
     </View>
   );
 }
@@ -1105,35 +1234,6 @@ function createStyles(colors: AppColors, isDark: boolean) {
     marginBottom: spacing.md,
     paddingTop: spacing.xl,
   },
-  tabHeader: {
-    marginBottom: spacing.md,
-    gap: spacing.xs,
-    paddingTop: spacing.lg,
-    alignItems: "center",
-  },
-  headerBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: radii.pill,
-    backgroundColor: colors.accentSoft,
-    borderWidth: 1.5,
-    borderColor: colors.accent,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: spacing.xs,
-  },
-  headerBadgeEmoji: {
-    fontSize: 26,
-    lineHeight: 30,
-  },
-  titleAccent: {
-    width: 40,
-    height: 4,
-    borderRadius: radii.pill,
-    backgroundColor: colors.accent,
-    marginTop: spacing.xs,
-    marginBottom: spacing.xs,
-  },
   back: {
     minWidth: 64,
     minHeight: touchTarget.min,
@@ -1154,67 +1254,63 @@ function createStyles(colors: AppColors, isDark: boolean) {
     textAlign: "center",
     flex: 1,
   },
-  screenTitleCenter: {
-    ...typography.wordmark,
-    textAlign: "center",
-    color: colors.textPrimary,
-  },
-  screenSub: {
-    ...typography.body,
-    color: colors.textSecondary,
-    textAlign: "center",
-    paddingHorizontal: spacing.md,
-    lineHeight: 22,
-  },
   summaryCard: {
     borderRadius: radii.xl,
-    borderWidth: 1.5,
-    borderColor: colors.border,
     backgroundColor: colors.surface,
-    padding: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
     marginBottom: spacing.md,
+    gap: spacing.sm,
+    alignItems: "center",
     ...summaryShadow,
   },
-  summaryTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-  },
-  summaryStat: {
-    flex: 1,
-    gap: 2,
-  },
-  summaryStatValue: {
-    ...typography.resultSecondary,
-    color: colors.textPrimary,
-    fontSize: 22,
-  },
-  summaryAmount: {
-    color: colors.accent,
-    fontFamily: fonts.bodyBold,
-  },
-  summaryStatLabel: {
+  summaryHeroLabel: {
     ...typography.badge,
     color: colors.textSecondary,
+    textAlign: "center",
+    marginTop: -2,
+  },
+  summaryMeta: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    alignSelf: "stretch",
+    marginTop: spacing.xs,
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    gap: spacing.md,
+  },
+  summaryMetaStat: {
+    flex: 1,
+    alignItems: "center",
+    gap: 2,
+  },
+  summaryMetaValue: {
+    ...typography.resultSecondary,
+    color: colors.textPrimary,
+    fontSize: 18,
+    fontVariant: ["tabular-nums"],
+  },
+  summaryMetaLabel: {
+    ...typography.badge,
+    color: colors.textSecondary,
+    textAlign: "center",
+  },
+  summaryMetaHint: {
+    ...typography.badge,
+    fontSize: 11,
+    lineHeight: 14,
+    color: colors.textSecondary,
+    fontFamily: fonts.bodySemiBold,
+    textAlign: "center",
+    marginTop: 1,
   },
   summaryDivider: {
-    width: 1,
-    height: 36,
+    width: StyleSheet.hairlineWidth,
+    alignSelf: "stretch",
+    minHeight: 36,
     backgroundColor: colors.border,
     opacity: 0.9,
-  },
-  summaryVibe: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.pill,
-    borderWidth: 1.5,
-    backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.55)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  summaryVibeEmoji: {
-    fontSize: 22,
-    lineHeight: 26,
   },
   searchWrap: {
     marginBottom: spacing.md,
@@ -1227,17 +1323,12 @@ function createStyles(colors: AppColors, isDark: boolean) {
     alignItems: "center",
     gap: spacing.sm,
     borderWidth: 1,
-    borderColor: isDark ? colors.border : "rgba(237, 228, 216, 0.95)",
+    borderColor: colors.border,
     backgroundColor: colors.surface,
     borderRadius: radii.xl,
     paddingHorizontal: spacing.md,
     minHeight: touchTarget.inputHeight - 4,
     ...summaryShadow,
-  },
-  searchIcon: {
-    fontSize: 16,
-    lineHeight: 20,
-    opacity: 0.75,
   },
   searchInput: {
     ...typography.body,
@@ -1262,21 +1353,6 @@ function createStyles(colors: AppColors, isDark: boolean) {
     gap: spacing.sm,
     paddingBottom: spacing.xxl,
   },
-  emptyBadge: {
-    width: 72,
-    height: 72,
-    borderRadius: radii.pill,
-    backgroundColor: colors.accentSoft,
-    borderWidth: 1.5,
-    borderColor: colors.accent,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: spacing.sm,
-  },
-  emptyEmoji: {
-    fontSize: 34,
-    lineHeight: 38,
-  },
   emptyTitle: {
     ...typography.body,
     fontFamily: fonts.bodyBold,
@@ -1299,7 +1375,7 @@ function createStyles(colors: AppColors, isDark: boolean) {
     backgroundColor: colors.accentSoft,
     borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: isDark ? colors.border : "rgba(255, 184, 0, 0.25)",
+    borderColor: colors.border,
     paddingVertical: 6,
     paddingHorizontal: spacing.md,
     marginTop: spacing.sm,
@@ -1312,42 +1388,24 @@ function createStyles(colors: AppColors, isDark: boolean) {
   },
   card: {
     borderRadius: radii.xl,
-    borderWidth: 1.5,
-    borderColor: colors.border,
     backgroundColor: colors.surface,
-    marginBottom: spacing.md,
     overflow: "hidden",
     position: "relative",
-    ...cardShadow,
-  },
-  cardAccent: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 5,
-    borderTopLeftRadius: radii.xl,
-    borderBottomLeftRadius: radii.xl,
   },
   cardLocked: {
     marginBottom: 0,
   },
+  cardInSwipe: {
+    marginBottom: 0,
+  },
+  swipeRow: {
+    marginBottom: spacing.md,
+    borderRadius: radii.xl,
+    backgroundColor: colors.surface,
+    ...cardShadow,
+  },
   lockedCardWrap: {
     marginBottom: spacing.md,
-  },
-  deleteAction: {
-    width: 80,
-    marginBottom: spacing.md,
-    backgroundColor: colors.destructive,
-    justifyContent: "center",
-    alignItems: "center",
-    borderTopRightRadius: radii.xl,
-    borderBottomRightRadius: radii.xl,
-  },
-  deleteActionText: {
-    ...typography.badge,
-    fontFamily: fonts.bodySemiBold,
-    color: "#FFFFFF",
   },
   cardSettled: {
     opacity: 0.78,
@@ -1356,7 +1414,6 @@ function createStyles(colors: AppColors, isDark: boolean) {
   },
   cardBody: {
     padding: spacing.md,
-    paddingLeft: spacing.md + 4,
     gap: spacing.xs,
   },
   cardTop: {
@@ -1380,45 +1437,18 @@ function createStyles(colors: AppColors, isDark: boolean) {
     ...typography.badge,
     color: colors.textSecondary,
   },
-  donePill: {
-    width: 36,
-    height: 36,
-    borderRadius: radii.pill,
-    backgroundColor: isDark ? "rgba(34, 139, 34, 0.2)" : "rgba(34, 139, 34, 0.12)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  doneMark: {
-    fontSize: 18,
-    lineHeight: 22,
-  },
-  vibePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 5,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    backgroundColor: isDark ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.65)",
-    maxWidth: "52%",
-  },
-  vibeEmojiWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: radii.pill,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  vibeEmoji: {
-    fontSize: 15,
-    lineHeight: 18,
-  },
-  vibeLabel: {
+  statusLabel: {
     ...typography.badge,
     fontFamily: fonts.bodySemiBold,
-    color: colors.textPrimary,
-    flexShrink: 1,
+    color: colors.textSecondary,
+    maxWidth: "42%",
+    textAlign: "right",
+  },
+  statusLabelMuted: {
+    ...typography.badge,
+    fontFamily: fonts.bodySemiBold,
+    color: colors.textSecondary,
+    opacity: 0.85,
   },
   amountLine: {
     ...typography.resultSecondary,
@@ -1435,7 +1465,7 @@ function createStyles(colors: AppColors, isDark: boolean) {
     flexWrap: "wrap",
   },
   daysBadge: {
-    backgroundColor: isDark ? "rgba(0,0,0,0.22)" : "rgba(28, 25, 23, 0.07)",
+    backgroundColor: colors.accentSoft,
     borderRadius: radii.pill,
     paddingVertical: 4,
     paddingHorizontal: spacing.sm,
@@ -1461,11 +1491,35 @@ function createStyles(colors: AppColors, isDark: boolean) {
     flexDirection: "row",
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
-    paddingBottom: spacing.md,
+    paddingBottom: 0,
     paddingTop: spacing.xs,
-    paddingLeft: spacing.md + 4,
+  },
+  cardActionsCol: {
+    gap: spacing.sm,
+    paddingBottom: spacing.md,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: isDark ? colors.border : "rgba(237, 228, 216, 0.85)",
+    borderTopColor: colors.border,
+  },
+  escalatePill: {
+    marginHorizontal: spacing.md,
+    minHeight: 40,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.md,
+  },
+  escalatePillHot: {
+    borderColor: colors.accent,
+    backgroundColor: colors.accentSoft,
+  },
+  escalatePillText: {
+    ...typography.badge,
+    fontFamily: fonts.bodySemiBold,
+    color: colors.textPrimary,
+    fontSize: 13,
   },
   reminderPill: {
     flex: 1,
@@ -1494,7 +1548,7 @@ function createStyles(colors: AppColors, isDark: boolean) {
     flex: 1,
     minHeight: touchTarget.min - 4,
     borderRadius: radii.pill,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
     alignItems: "center",
@@ -1550,7 +1604,7 @@ function createStyles(colors: AppColors, isDark: boolean) {
   },
   sharePreviewCloseText: {
     ...typography.input,
-    color: "rgba(243, 232, 212, 0.92)",
+    color: "rgba(241, 242, 244, 0.92)",
     fontFamily: fonts.body,
     fontWeight: "400",
   },
@@ -1612,7 +1666,7 @@ function createStyles(colors: AppColors, isDark: boolean) {
   },
   sharePreviewDismissText: {
     ...typography.body,
-    color: "rgba(243, 232, 212, 0.78)",
+    color: "rgba(241, 242, 244, 0.78)",
     fontFamily: fonts.body,
   },
   });

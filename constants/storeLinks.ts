@@ -1,4 +1,4 @@
-/** Google Play — package must match `app.json` android.package */
+/** Google Play: package must match `app.json` android.package */
 export const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.noorlyfe.nudgrr";
 
 /**
@@ -10,5 +10,5 @@ export function getAppStoreUrl(): string {
   if (typeof id === "string" && /^\d+$/.test(id.trim())) {
     return `https://apps.apple.com/app/id${id.trim()}`;
   }
-  return "https://apps.apple.com/search?term=Nudgrr";
+  return "https://apps.apple.com/search?term=Splitmee";
 }

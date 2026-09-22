@@ -1,5 +1,7 @@
 PODS:
-  - EXConstants (55.0.15):
+  - EXApplication (55.0.19):
+    - ExpoModulesCore
+  - EXConstants (55.0.17):
     - ExpoModulesCore
   - EXJSONUtils (55.0.2)
   - EXManifests (55.0.16):
@@ -183,6 +185,8 @@ PODS:
     - ExpoModulesCore
   - ExpoClipboard (55.0.13):
     - ExpoModulesCore
+  - ExpoDocumentPicker (55.0.17):
+    - ExpoModulesCore
   - ExpoDomWebView (55.0.5):
     - ExpoModulesCore
   - ExpoFileSystem (55.0.22):
@@ -238,6 +242,8 @@ PODS:
     - React-Core
     - React-runtimescheduler
     - ReactCommon
+  - ExpoNotifications (55.0.27):
+    - ExpoModulesCore
   - ExpoRouter (55.0.13):
     - ExpoModulesCore
     - RNScreens
@@ -258,17 +264,17 @@ PODS:
     - libavif/core
     - libdav1d (>= 0.6.0)
   - libdav1d (1.2.0)
-  - libwebp (1.5.0):
-    - libwebp/demux (= 1.5.0)
-    - libwebp/mux (= 1.5.0)
-    - libwebp/sharpyuv (= 1.5.0)
-    - libwebp/webp (= 1.5.0)
-  - libwebp/demux (1.5.0):
+  - libwebp (1.6.0):
+    - libwebp/demux (= 1.6.0)
+    - libwebp/mux (= 1.6.0)
+    - libwebp/sharpyuv (= 1.6.0)
+    - libwebp/webp (= 1.6.0)
+  - libwebp/demux (1.6.0):
     - libwebp/webp
-  - libwebp/mux (1.5.0):
+  - libwebp/mux (1.6.0):
     - libwebp/demux
-  - libwebp/sharpyuv (1.5.0)
-  - libwebp/webp (1.5.0):
+  - libwebp/sharpyuv (1.6.0)
+  - libwebp/webp (1.6.0):
     - libwebp/sharpyuv
   - OneSignalXCFramework (5.5.1):
     - OneSignalXCFramework/OneSignalComplete (= 5.5.1)
@@ -2508,6 +2514,7 @@ PODS:
   - Yoga (0.0.0)
 
 DEPENDENCIES:
+  - EXApplication (from `../node_modules/expo-application/ios`)
   - EXConstants (from `../node_modules/expo-constants/ios`)
   - EXJSONUtils (from `../node_modules/expo-json-utils/ios`)
   - EXManifests (from `../node_modules/expo-manifests/ios`)
@@ -2519,6 +2526,7 @@ DEPENDENCIES:
   - ExpoAsset (from `../node_modules/expo-asset/ios`)
   - ExpoBlur (from `../node_modules/expo-blur/ios`)
   - ExpoClipboard (from `../node_modules/expo-clipboard/ios`)
+  - ExpoDocumentPicker (from `../node_modules/expo-document-picker/ios`)
   - "ExpoDomWebView (from `../node_modules/@expo/dom-webview/ios`)"
   - ExpoFileSystem (from `../node_modules/expo-file-system/ios`)
   - ExpoFont (from `../node_modules/expo-font/ios`)
@@ -2531,6 +2539,7 @@ DEPENDENCIES:
   - "ExpoLogBox (from `../node_modules/@expo/log-box`)"
   - ExpoModulesCore (from `../node_modules/expo/node_modules/expo-modules-core`)
   - ExpoModulesJSI (from `../node_modules/expo/node_modules/expo-modules-core`)
+  - ExpoNotifications (from `../node_modules/expo-notifications/ios`)
   - ExpoRouter (from `../node_modules/expo-router/ios`)
   - ExpoSharing (from `../node_modules/expo-sharing/ios`)
   - ExpoSplashScreen (from `../node_modules/expo-splash-screen/ios`)
@@ -2636,6 +2645,8 @@ SPEC REPOS:
     - SDWebImageWebPCoder
 
 EXTERNAL SOURCES:
+  EXApplication:
+    :path: "../node_modules/expo-application/ios"
   EXConstants:
     :path: "../node_modules/expo-constants/ios"
   EXJSONUtils:
@@ -2658,6 +2669,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-blur/ios"
   ExpoClipboard:
     :path: "../node_modules/expo-clipboard/ios"
+  ExpoDocumentPicker:
+    :path: "../node_modules/expo-document-picker/ios"
   ExpoDomWebView:
     :path: "../node_modules/@expo/dom-webview/ios"
   ExpoFileSystem:
@@ -2682,6 +2695,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo/node_modules/expo-modules-core"
   ExpoModulesJSI:
     :path: "../node_modules/expo/node_modules/expo-modules-core"
+  ExpoNotifications:
+    :path: "../node_modules/expo-notifications/ios"
   ExpoRouter:
     :path: "../node_modules/expo-router/ios"
   ExpoSharing:
@@ -2861,7 +2876,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
-  EXConstants: 5caf448ff399f60be9d1053e77aed32e39411900
+  EXApplication: 91436e68f46d5c6c830777300acaf833c7c7a496
+  EXConstants: 49a092f564eb895b79ab416f53ba54f7e6935197
   EXJSONUtils: 04bc3807d351331a5fe154ce1da596ec15d99169
   EXManifests: f4e50a54115948e206f4c2391bdea755a1aa74ec
   Expo: 8d901a968aee7a848334798753b63c4a8bf08bd4
@@ -2872,6 +2888,7 @@ SPEC CHECKSUMS:
   ExpoAsset: f56ed740b6a127da2bfd90832cf688ae309d4410
   ExpoBlur: 7a86e84e7728108fa6908d7103fa527705a3dbbf
   ExpoClipboard: 5d1b0cd2686406f21e616f2d9b3431259dee2e6a
+  ExpoDocumentPicker: 6b83f9b3c5df77bf4129ced5199fc51ea1d9b12c
   ExpoDomWebView: 2b2fbd9a07de8790569257cbf9dfdaa31cf95c70
   ExpoFileSystem: 61e663d0bbd1a973d324530d1d6ee559a5e5192c
   ExpoFont: a95606f106a6394df8edf6d0d87aab9020af5ad4
@@ -2884,6 +2901,7 @@ SPEC CHECKSUMS:
   ExpoLogBox: 617da77cbc083627692b2ea050a3666808aef2cd
   ExpoModulesCore: 088468ce2605ce08b704105945c2232e73a7b9ee
   ExpoModulesJSI: 9b60671a31c30bc8e24b25632e7cb475a84b9016
+  ExpoNotifications: 6d4f3cf4eda7a7bab49f11aacc1687ed5a0f17a2
   ExpoRouter: e2c56f80102b153c5f8c887b38094ef936c266a2
   ExpoSharing: 5acc9d78894386d31b862b12ed1cebe7dce74e68
   ExpoSplashScreen: 43517d54a0f90d381c80deda859aa6087e80884b
@@ -2893,7 +2911,7 @@ SPEC CHECKSUMS:
   hermes-engine: c616e0d9a2c2cf5bf6d3166c246e7018f344182e
   libavif: 5f8e715bea24debec477006f21ef9e95432e254d
   libdav1d: 23581a4d8ec811ff171ed5e2e05cd27bad64c39f
-  libwebp: 02b23773aedb6ff1fd38cec7a77b81414c6842a8
+  libwebp: af5937a13536ef73f3784d69cc342b98961acf33
   OneSignalXCFramework: 2b46c36b38528b65dce33ed9d83375f8c98bf40c
   PurchasesHybridCommon: 32902b8fad349cf549f096183926ee33af00e36a
   RCTDeprecation: 5045f20b2cc1239bf422764004338c720684a22f

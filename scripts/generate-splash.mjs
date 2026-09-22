@@ -1,5 +1,5 @@
 /**
- * Native splash assets — plain cream field (animation lives in AnimatedSplash).
+ * Native splash assets: deep field + Splitmee mark with glow + heat tip.
  * Run: node scripts/generate-splash.mjs
  */
 import fs from "fs";
@@ -7,22 +7,25 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { createCanvas } from "@napi-rs/canvas";
 import sharp from "sharp";
-import { ICON } from "./nudgrr-app-icon-mark.mjs";
+import { ICON, drawAppIconMark, fillIconBackground } from "./nudgrr-app-icon-mark.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
 
-function creamPng(size) {
+function splashLogoPng(size) {
   const canvas = createCanvas(size, size);
   const ctx = canvas.getContext("2d");
-  ctx.fillStyle = ICON.bg;
-  ctx.fillRect(0, 0, size, size);
+  fillIconBackground(ctx, size, false);
+  drawAppIconMark(ctx, size / 2, size / 2, size * 0.78, {
+    withGlow: false,
+    withSpark: true,
+  });
   return canvas.toBuffer("image/png");
 }
 
 async function writeSplashLogo() {
   const logoSize = 840;
-  const buf = creamPng(logoSize);
+  const buf = splashLogoPng(logoSize);
   const out = path.join(root, "assets", "splash-logo.png");
   fs.writeFileSync(out, buf);
   console.log("Wrote", out, `(${logoSize}×${logoSize})`);
@@ -79,8 +82,19 @@ function writeFullSplash() {
   const H = 2688;
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext("2d");
-  ctx.fillStyle = ICON.bg;
+
+  // Tall radial field: lit center behind mark, deep edges
+  const g = ctx.createRadialGradient(W * 0.5, H * 0.4, H * 0.02, W * 0.5, H * 0.42, H * 0.55);
+  g.addColorStop(0, ICON.bgMid);
+  g.addColorStop(0.4, ICON.bg);
+  g.addColorStop(1, "#06070A");
+  ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
+
+  drawAppIconMark(ctx, W / 2, H * 0.4, Math.min(W, H) * 0.38, {
+    withGlow: false,
+    withSpark: true,
+  });
   const out = path.join(root, "assets", "splash.png");
   fs.writeFileSync(out, canvas.toBuffer("image/png"));
   console.log("Wrote", out, `(${W}×${H})`);

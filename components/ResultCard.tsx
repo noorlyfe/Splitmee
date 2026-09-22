@@ -128,7 +128,6 @@ export function ResultCard({
   return (
     <View style={styles.card}>
       <View style={styles.accentBar} />
-      <View style={styles.glow} pointerEvents="none" />
 
       <View style={styles.heroBlock}>
         <Text style={styles.eyebrow}>{t("totalPerPersonLabel")}</Text>
@@ -185,15 +184,6 @@ function createStyles(colors: AppColors) {
       borderBottomLeftRadius: radii.pill,
       borderBottomRightRadius: radii.pill,
       backgroundColor: colors.accent,
-    },
-    glow: {
-      position: "absolute",
-      top: -40,
-      right: -30,
-      width: 120,
-      height: 120,
-      borderRadius: 60,
-      backgroundColor: colors.accentSoft,
     },
     heroBlock: {
       alignItems: "center",

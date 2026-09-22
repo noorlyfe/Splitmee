@@ -1,4 +1,4 @@
-/** Web preview — OneSignal is native-only. */
+/** Web preview: OneSignal is native-only. */
 export async function trackNudgeSent(_isPro: boolean, _locale: string): Promise<void> {}
 
 export async function trackProStatus(_isPro: boolean): Promise<void> {}

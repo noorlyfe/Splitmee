@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Platform, Share, StyleSheet, Text, View } from "react-native";
 import { Pressable } from "react-native-gesture-handler";
-import * as Haptics from "expo-haptics";
+import * as Haptics from "../lib/appHaptics";
 import { useRouter } from "expo-router";
 
 import { AppAlert } from "./AppAlert";
@@ -68,7 +68,7 @@ export function NudgeSection({
     [amountFormatted, formatRawBody]
   );
 
-  // Nudge preview text — always synced for receipt capture; never gated by quota or Pro.
+  // Nudge preview text: always synced for receipt capture; never gated by quota or Pro.
   useEffect(() => {
     onPreviewTextChange?.(rawBody);
   }, [onPreviewTextChange, rawBody]);
@@ -181,7 +181,7 @@ export function NudgeSection({
         })}
       </View>
 
-      {/* Preview message — always visible for free and Pro; not affected by monthly nudge limit */}
+      {/* Preview message: always visible for free and Pro; not affected by monthly nudge limit */}
       <View style={styles.preview}>
         <Text style={styles.previewLabel}>{t("preview")}</Text>
         {contextLabel ? (

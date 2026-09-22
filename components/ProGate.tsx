@@ -61,7 +61,7 @@ function createStyles(colors: AppColors, isDark: boolean) {
     flex: 1,
   },
   overlayTint: {
-    backgroundColor: isDark ? "rgba(26, 23, 16, 0.65)" : "rgba(235, 221, 200, 0.55)",
+    backgroundColor: isDark ? "rgba(16, 18, 20, 0.62)" : "rgba(244, 245, 247, 0.58)",
   },
   overlayInner: {
     ...StyleSheet.absoluteFillObject,

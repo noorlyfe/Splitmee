@@ -20,10 +20,10 @@ export function ReceiptCustomFooter({ text, color }: Props) {
 
 const styles = StyleSheet.create({
   footer: {
-    fontFamily: fonts.mono,
-    fontSize: 10,
+    fontFamily: fonts.body,
+    fontSize: 12,
+    lineHeight: 18,
     textAlign: "center",
-    marginTop: 8,
-    marginBottom: 4,
+    marginTop: 4,
   },
 });

@@ -14,7 +14,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import * as Haptics from "expo-haptics";
+import * as Haptics from "../../lib/appHaptics";
 import * as Sharing from "expo-sharing";
 import { shareReceiptImage } from "../../lib/shareReceiptImage";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -163,7 +163,7 @@ export default function ProjectDetailScreen() {
     }
     const start = formatDateMedium(project.createdAt, locale);
     const end = project.closedAt ? formatDateMedium(project.closedAt, locale) : start;
-    return start === end ? start : `${start} – ${end}`;
+    return start === end ? start : `${start}  to  ${end}`;
   }, [locale, project]);
 
   const receiptSettlements = useMemo(() => {
@@ -414,7 +414,7 @@ export default function ProjectDetailScreen() {
               <View key={payment.participantId} style={styles.expenseMetaRow}>
                 <Text style={styles.expenseMeta}>
                   {t("projectExpensePaidLine", {
-                    name: nameById.get(payment.participantId) ?? "—",
+                    name: nameById.get(payment.participantId) ?? "",
                     amount: formatCurrency(payment.amount, currency),
                   })}
                 </Text>
@@ -778,7 +778,7 @@ export default function ProjectDetailScreen() {
                       >
                         <Text style={styles.chooseRowText}>
                           {selected ? "✓ " : ""}
-                          {s.participantName} · {formatCurrency(s.totalOwed, currency)}
+                          {s.participantName}, {formatCurrency(s.totalOwed, currency)}
                         </Text>
                       </Pressable>
                     );
@@ -928,7 +928,7 @@ function createStyles(colors: AppColors, isDark: boolean) {
     heroCard: {
       borderRadius: radii.xl,
       borderWidth: 1.5,
-      borderColor: isDark ? colors.border : "rgba(255, 184, 0, 0.35)",
+      borderColor: isDark ? colors.border : colors.border,
       backgroundColor: isDark ? colors.surface : colors.accentSoft,
       padding: spacing.md,
       gap: spacing.sm,
@@ -1001,7 +1001,7 @@ function createStyles(colors: AppColors, isDark: boolean) {
     sectionCard: {
       borderRadius: radii.xl,
       borderWidth: 1.5,
-      borderColor: isDark ? colors.border : "rgba(237, 228, 216, 0.95)",
+      borderColor: colors.border,
       backgroundColor: colors.surface,
       padding: spacing.md,
       gap: spacing.sm,
@@ -1010,7 +1010,7 @@ function createStyles(colors: AppColors, isDark: boolean) {
     formCard: {
       borderRadius: radii.xl,
       borderWidth: 1.5,
-      borderColor: isDark ? colors.border : "rgba(237, 228, 216, 0.95)",
+      borderColor: colors.border,
       backgroundColor: colors.surface,
       padding: spacing.md,
       gap: spacing.sm,
@@ -1021,7 +1021,7 @@ function createStyles(colors: AppColors, isDark: boolean) {
       backgroundColor: colors.accentSoft,
       borderRadius: radii.pill,
       borderWidth: 1,
-      borderColor: isDark ? colors.border : "rgba(255, 184, 0, 0.25)",
+      borderColor: colors.border,
       paddingVertical: 5,
       paddingHorizontal: spacing.sm,
     },
@@ -1042,7 +1042,7 @@ function createStyles(colors: AppColors, isDark: boolean) {
       paddingVertical: spacing.sm,
       paddingHorizontal: spacing.sm,
       borderRadius: radii.lg,
-      backgroundColor: isDark ? colors.background : "#FFFDF8",
+      backgroundColor: isDark ? colors.background : colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
     },
@@ -1076,7 +1076,7 @@ function createStyles(colors: AppColors, isDark: boolean) {
       color: colors.textPrimary,
       borderWidth: 1,
       borderColor: colors.border,
-      backgroundColor: isDark ? colors.background : "#FFFDF8",
+      backgroundColor: isDark ? colors.background : colors.surface,
       borderRadius: radii.lg,
       paddingHorizontal: spacing.md,
       minHeight: touchTarget.inputHeight - 8,
@@ -1090,7 +1090,7 @@ function createStyles(colors: AppColors, isDark: boolean) {
       borderRadius: radii.lg,
       borderWidth: 1,
       borderColor: colors.border,
-      backgroundColor: isDark ? colors.background : "#FFFDF8",
+      backgroundColor: isDark ? colors.background : colors.surface,
       padding: spacing.sm,
       gap: spacing.xs,
     },
@@ -1128,7 +1128,7 @@ function createStyles(colors: AppColors, isDark: boolean) {
       borderRadius: radii.lg,
       backgroundColor: isDark ? colors.background : colors.accentSoft,
       borderWidth: 1,
-      borderColor: isDark ? colors.border : "rgba(255, 184, 0, 0.2)",
+      borderColor: colors.border,
     },
     paymentSummaryText: {
       ...typography.badge,

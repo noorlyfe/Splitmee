@@ -1,4 +1,4 @@
-/** Shared splash typography — keep in sync with AnimatedSplash and scripts/generate-splash.mjs. */
+/** Shared splash typography: keep in sync with AnimatedSplash and scripts/generate-splash.mjs. */
 module.exports = {
   designWidth: 1242,
   wordmarkSize: 112,
@@ -7,6 +7,6 @@ module.exports = {
   taglineKern: 3.8,
   wordmarkFont: "Inter-Bold",
   taglineFont: "Inter-SemiBold",
-  titleText: "Nudgrr",
-  taglineText: "TAKE THE AWKWARD OUT OF ASKING",
+  titleText: "Splitmee",
+  taglineText: "SPLIT IT. SEND IT. DONE.",
 };

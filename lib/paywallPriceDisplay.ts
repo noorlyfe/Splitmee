@@ -1,6 +1,6 @@
 import { LOCALE_BCP47, type SupportedLocale } from "./i18n";
 
-// ===== PAYWALL CURRENCY DISPLAY (display only; Apple/Google charge the store price) — do not remove =====
+// ===== PAYWALL CURRENCY DISPLAY (display only; Apple/Google charge the store price) :  do not remove =====
 // Amounts from App Store Connect “Starting Subscription Price” (USD/EUR/DKK/JPY/CNY/TWD markets).
 
 type PaywallLocalePriceConfig = {
@@ -10,7 +10,7 @@ type PaywallLocalePriceConfig = {
   maxFractionDigits: number;
 };
 
-/** Display symbol per app language — not the billed currency. */
+/** Display symbol per app language: not the billed currency. */
 const PAYWALL_DISPLAY_SYMBOL: Record<SupportedLocale, string> = {
   en: "$",
   da: "kr.",
@@ -23,14 +23,14 @@ const PAYWALL_DISPLAY_SYMBOL: Record<SupportedLocale, string> = {
 };
 
 const PAYWALL_LOCALE_PRICE: Record<SupportedLocale, PaywallLocalePriceConfig> = {
-  en: { amount: 4.99, minFractionDigits: 2, maxFractionDigits: 2 }, // United States · USD
-  da: { amount: 39, minFractionDigits: 2, maxFractionDigits: 2 }, // Denmark · DKK
-  de: { amount: 5.99, minFractionDigits: 2, maxFractionDigits: 2 }, // Germany · EUR
-  fr: { amount: 5.99, minFractionDigits: 2, maxFractionDigits: 2 }, // France · EUR
-  es: { amount: 5.99, minFractionDigits: 2, maxFractionDigits: 2 }, // Spain · EUR
-  ja: { amount: 800, minFractionDigits: 0, maxFractionDigits: 0 }, // Japan · JPY
-  zh: { amount: 38, minFractionDigits: 0, maxFractionDigits: 0 }, // China mainland · CNY
-  "zh-TW": { amount: 150, minFractionDigits: 0, maxFractionDigits: 0 }, // Taiwan · TWD
+  en: { amount: 4.99, minFractionDigits: 2, maxFractionDigits: 2 }, // United States, USD
+  da: { amount: 39, minFractionDigits: 2, maxFractionDigits: 2 }, // Denmark, DKK
+  de: { amount: 5.99, minFractionDigits: 2, maxFractionDigits: 2 }, // Germany, EUR
+  fr: { amount: 5.99, minFractionDigits: 2, maxFractionDigits: 2 }, // France, EUR
+  es: { amount: 5.99, minFractionDigits: 2, maxFractionDigits: 2 }, // Spain, EUR
+  ja: { amount: 800, minFractionDigits: 0, maxFractionDigits: 0 }, // Japan, JPY
+  zh: { amount: 38, minFractionDigits: 0, maxFractionDigits: 0 }, // China mainland, CNY
+  "zh-TW": { amount: 150, minFractionDigits: 0, maxFractionDigits: 0 }, // Taiwan, TWD
 };
 
 type SymbolPlacement = "prefix" | "suffix";
@@ -45,10 +45,6 @@ const PAYWALL_SYMBOL_PLACEMENT: Record<SupportedLocale, SymbolPlacement> = {
   zh: "prefix",
   "zh-TW": "prefix",
 };
-
-export function getPaywallDisplayPrice(locale: SupportedLocale): number {
-  return PAYWALL_LOCALE_PRICE[locale].amount;
-}
 
 function formatAmountNumber(amount: number, locale: SupportedLocale): string {
   const { minFractionDigits, maxFractionDigits } = PAYWALL_LOCALE_PRICE[locale];

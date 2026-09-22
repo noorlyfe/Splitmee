@@ -1,22 +1,23 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Platform,
-  Pressable,
   SectionList,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { Swipeable } from "react-native-gesture-handler";
-import { Ionicons } from "@expo/vector-icons";
+import { Pressable, Swipeable } from "react-native-gesture-handler";
+import { RoundedSwipeRow } from "../../components/RoundedSwipeRow";
 import { StatusBar } from "expo-status-bar";
-import * as Haptics from "expo-haptics";
+import * as Haptics from "../../lib/appHaptics";
 import { useFocusEffect, useRouter, type Href } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppAlert } from "../../components/AppAlert";
 import { ProGate } from "../../components/ProGate";
+import { SwipeDeleteAction } from "../../components/SwipeDeleteAction";
 import { fonts, radii, spacing, touchTarget, typography, type AppColors } from "../../constants/theme";
 import { useAppPreferences } from "../../hooks/useAppPreferences";
 import { useColors } from "../../hooks/useColors";
@@ -97,38 +98,25 @@ export default function ProjectsTab() {
       const total = projectTotalSpent(item);
       const isOpen = item.status === "open";
       const statusLabel = isOpen ? t("projectStatusOpen") : t("projectStatusClosed");
-      const accentBar = isOpen ? colors.accent : colors.border;
-      const cardBg = isOpen
-        ? isDark
-          ? "rgba(255, 201, 64, 0.08)"
-          : colors.accentSoft
-        : colors.surface;
-      const cardBorder = isOpen
-        ? isDark
-          ? "rgba(255, 201, 64, 0.35)"
-          : "rgba(255, 184, 0, 0.35)"
-        : colors.border;
 
-      const renderRightActions = () => (
-        <Pressable
+      const renderRightActions = (progress: Animated.AnimatedInterpolation<number>) => (
+        <SwipeDeleteAction
+          progress={progress}
+          label={t("delete")}
           onPress={() => requestDelete(item)}
-          style={styles.deleteAction}
-          accessibilityRole="button"
-          accessibilityLabel={t("delete")}
-        >
-          <Ionicons name="trash" size={22} color="#FFFFFF" accessibilityElementsHidden importantForAccessibility="no" />
-        </Pressable>
+        />
       );
 
       return (
-        <Swipeable
-          ref={(ref) => {
+        <RoundedSwipeRow
+          swipeableRef={(ref) => {
             if (ref) {
               swipeRefs.current.set(item.id, ref);
             } else {
               swipeRefs.current.delete(item.id);
             }
           }}
+          style={styles.cardShell}
           renderRightActions={renderRightActions}
           overshootRight={false}
           friction={2}
@@ -140,15 +128,10 @@ export default function ProjectsTab() {
               void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               router.push(`/project/${item.id}` as Href);
             }}
-            style={({ pressed }) => [
-              styles.card,
-              { backgroundColor: cardBg, borderColor: cardBorder },
-              pressed && styles.cardPressed,
-            ]}
+            style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
             accessibilityRole="button"
             accessibilityLabel={item.name}
           >
-            <View style={[styles.cardAccent, { backgroundColor: accentBar }]} />
             <View style={styles.cardBody}>
               <View style={[styles.cardTop, rtlRow(isRTL)]}>
                 <Text style={styles.cardTitle} numberOfLines={2}>
@@ -163,36 +146,29 @@ export default function ProjectsTab() {
               <View style={[styles.statsRow, rtlRow(isRTL)]}>
                 <View style={styles.statChip}>
                   <Text style={styles.statChipText}>
-                    👥 {t("projectParticipantsCount", { count: item.participants.length })}
+                    {t("projectParticipantsCount", { count: item.participants.length })}
                   </Text>
                 </View>
                 <View style={styles.statChip}>
                   <Text style={styles.statChipText}>
-                    🧾 {item.expenses.length}
+                    {`${item.expenses.length} ${t("projectExpensesTitle")}`}
                   </Text>
                 </View>
                 <Text style={styles.cardTotal}>{formatCurrency(total, currency)}</Text>
               </View>
             </View>
           </Pressable>
-        </Swipeable>
+        </RoundedSwipeRow>
       );
     },
-    [colors.accent, colors.border, colors.surface, currency, isDark, locked, requestDelete, router, styles, t]
+    [currency, locked, requestDelete, router, styles, t, isRTL]
   );
 
   const bottomPad = Math.max(insets.bottom, spacing.sm) + 88;
 
-  const listHeader = (
-    <View style={styles.headerBlock}>
-      <View style={styles.headerBadge}>
-        <Text style={styles.headerBadgeEmoji}>📋</Text>
-      </View>
-      <Text style={styles.title}>{t("theProject")}</Text>
-      <View style={styles.titleAccent} />
-      <Text style={styles.subtitle}>{t("theProjectSubtitle")}</Text>
-
-      {projects.length > 0 ? (
+  const listHeader =
+    projects.length > 0 ? (
+      <View style={styles.headerBlock}>
         <View style={styles.summaryCard}>
           <View style={[styles.summaryRow, rtlRow(isRTL)]}>
             <View style={styles.summaryStat}>
@@ -211,9 +187,8 @@ export default function ProjectsTab() {
             </View>
           </View>
         </View>
-      ) : null}
-    </View>
-  );
+      </View>
+    ) : null;
 
   const createFooter = (
     <View style={[styles.footer, { paddingBottom: bottomPad }]}>
@@ -237,9 +212,6 @@ export default function ProjectsTab() {
       <View style={styles.emptyWrap}>
         {listHeader}
         <View style={styles.emptyCenter}>
-          <View style={styles.emptyBadge}>
-            <Text style={styles.emptyEmoji}>📋</Text>
-          </View>
           <Text style={styles.emptyTitle}>{t("projectEmpty")}</Text>
         </View>
         {createFooter}
@@ -350,52 +322,12 @@ function createStyles(colors: AppColors, isDark: boolean) {
       backgroundColor: "transparent",
     },
     headerBlock: {
-      paddingTop: spacing.lg,
+      paddingTop: spacing.sm,
       paddingBottom: spacing.md,
-      gap: spacing.xs,
-      alignItems: "center",
-    },
-    headerBadge: {
-      width: 52,
-      height: 52,
-      borderRadius: radii.pill,
-      backgroundColor: colors.accentSoft,
-      borderWidth: 1.5,
-      borderColor: colors.accent,
-      alignItems: "center",
-      justifyContent: "center",
-      marginBottom: spacing.xs,
-    },
-    headerBadgeEmoji: {
-      fontSize: 26,
-      lineHeight: 30,
-    },
-    titleAccent: {
-      width: 40,
-      height: 4,
-      borderRadius: radii.pill,
-      backgroundColor: colors.accent,
-      marginTop: spacing.xs,
-      marginBottom: spacing.xs,
-    },
-    title: {
-      ...typography.wordmark,
-      color: colors.textPrimary,
-      textAlign: "center",
-    },
-    subtitle: {
-      ...typography.body,
-      color: colors.textSecondary,
-      textAlign: "center",
-      paddingHorizontal: spacing.md,
-      lineHeight: 22,
     },
     summaryCard: {
       width: "100%",
-      marginTop: spacing.md,
       borderRadius: radii.xl,
-      borderWidth: 1.5,
-      borderColor: isDark ? colors.border : "rgba(255, 184, 0, 0.3)",
       backgroundColor: colors.surface,
       padding: spacing.md,
       ...heroShadow,
@@ -452,7 +384,7 @@ function createStyles(colors: AppColors, isDark: boolean) {
       backgroundColor: colors.accentSoft,
       borderRadius: radii.pill,
       borderWidth: 1,
-      borderColor: isDark ? colors.border : "rgba(255, 184, 0, 0.25)",
+      borderColor: colors.border,
       paddingVertical: 6,
       paddingHorizontal: spacing.md,
       marginBottom: spacing.sm,
@@ -463,23 +395,19 @@ function createStyles(colors: AppColors, isDark: boolean) {
       color: colors.textPrimary,
       letterSpacing: 0.1,
     },
-    card: {
+    cardShell: {
       borderRadius: radii.xl,
-      borderWidth: 1.5,
-      overflow: "hidden",
-      position: "relative",
+      backgroundColor: colors.surface,
       ...cardShadow,
     },
-    cardAccent: {
-      position: "absolute",
-      left: 0,
-      top: 0,
-      bottom: 0,
-      width: 5,
+    card: {
+      borderRadius: radii.xl,
+      backgroundColor: colors.surface,
+      overflow: "hidden",
+      position: "relative",
     },
     cardBody: {
       padding: spacing.md,
-      paddingLeft: spacing.md + 4,
       gap: spacing.sm,
     },
     cardPressed: {
@@ -503,20 +431,23 @@ function createStyles(colors: AppColors, isDark: boolean) {
       borderRadius: radii.pill,
       paddingHorizontal: spacing.sm,
       paddingVertical: 4,
-      backgroundColor: colors.accent,
-    },
-    statusPillClosed: {
-      backgroundColor: isDark ? "rgba(255,255,255,0.08)" : colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
+      backgroundColor: colors.surface,
+    },
+    statusPillClosed: {
+      backgroundColor: colors.surface,
+      borderColor: colors.border,
+      opacity: 0.85,
     },
     statusPillText: {
       ...typography.badge,
       fontFamily: fonts.bodySemiBold,
-      color: colors.pillActiveText,
+      color: colors.textSecondary,
     },
     statusPillTextClosed: {
       color: colors.textSecondary,
+      opacity: 0.8,
     },
     statsRow: {
       flexDirection: "row",
@@ -527,8 +458,8 @@ function createStyles(colors: AppColors, isDark: boolean) {
     statChip: {
       borderRadius: radii.pill,
       borderWidth: 1,
-      borderColor: isDark ? colors.border : "rgba(237, 228, 216, 0.95)",
-      backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.65)",
+      borderColor: colors.border,
+      backgroundColor: colors.accentSoft,
       paddingVertical: 3,
       paddingHorizontal: spacing.sm,
     },
@@ -545,35 +476,11 @@ function createStyles(colors: AppColors, isDark: boolean) {
     itemGap: {
       height: spacing.sm,
     },
-    deleteAction: {
-      width: 72,
-      marginBottom: 0,
-      backgroundColor: colors.destructive,
-      justifyContent: "center",
-      alignItems: "center",
-      borderTopRightRadius: radii.xl,
-      borderBottomRightRadius: radii.xl,
-    },
     emptyCenter: {
       flex: 1,
       justifyContent: "center",
       alignItems: "center",
       gap: spacing.sm,
-    },
-    emptyBadge: {
-      width: 72,
-      height: 72,
-      borderRadius: radii.pill,
-      backgroundColor: colors.accentSoft,
-      borderWidth: 1.5,
-      borderColor: colors.accent,
-      alignItems: "center",
-      justifyContent: "center",
-      marginBottom: spacing.sm,
-    },
-    emptyEmoji: {
-      fontSize: 34,
-      lineHeight: 38,
     },
     emptyTitle: {
       ...typography.body,

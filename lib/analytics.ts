@@ -6,6 +6,7 @@ export type AnalyticsEvent =
   | "nudge_regenerate"
   | "nudge_sent"
   | "receipt_share"
+  | "damage_export"
   | "paywall_opened"
   | "paywall_purchase"
   | "paywall_restore"

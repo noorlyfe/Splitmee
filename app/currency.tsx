@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useRouter } from "expo-router";
-import * as Haptics from "expo-haptics";
+import * as Haptics from "../lib/appHaptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { fonts, radii, spacing, touchTarget, typography, type AppColors } from "../constants/theme";
@@ -18,7 +18,11 @@ import { useAppPreferences } from "../hooks/useAppPreferences";
 import { useLocale } from "../hooks/useLocale";
 import { useColors } from "../hooks/useColors";
 import { useTheme } from "../hooks/useTheme";
-import { getAllCurrencyCodes, getCurrencyPickerName } from "../lib/currency";
+import {
+  getAllCurrencyCodes,
+  getCurrencyPickerName,
+  prioritizeCurrencyCode,
+} from "../lib/currency";
 import { rtlRow } from "../lib/rtl";
 import { safeRouterBack } from "../lib/safeRouterBack";
 
@@ -35,18 +39,25 @@ export default function CurrencyScreen() {
   const { loaded, currency: activeCode, setCurrency } = useAppPreferences();
   const [query, setQuery] = useState("");
 
-  const allRows = useMemo<Row[]>(() => getAllCurrencyCodes().map((code) => ({ code })), []);
+  const allRows = useMemo<Row[]>(() => {
+    const ordered = prioritizeCurrencyCode(getAllCurrencyCodes(), activeCode);
+    return ordered.map((code) => ({ code }));
+  }, [activeCode]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) {
       return allRows;
     }
-    return allRows.filter((r) => {
+    const matched = allRows.filter((r) => {
       const name = getCurrencyPickerName(r.code);
       return r.code.toLowerCase().includes(q) || name.toLowerCase().includes(q);
     });
-  }, [allRows, query]);
+    return prioritizeCurrencyCode(
+      matched.map((r) => r.code),
+      activeCode
+    ).map((code) => ({ code }));
+  }, [activeCode, allRows, query]);
 
   const handleBack = useCallback(() => {
     safeRouterBack(router);

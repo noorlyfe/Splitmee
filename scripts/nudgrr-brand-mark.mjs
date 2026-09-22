@@ -1,5 +1,5 @@
 /**
- * Shared Nudgrr brand mark — minimal receipt + gold nudge chevron.
+ * Shared Nudgrr brand mark: minimal receipt + gold nudge chevron.
  */
 
 export const BRAND = {

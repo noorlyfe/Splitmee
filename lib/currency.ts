@@ -70,7 +70,7 @@ export function isValidCurrencyCode(code: string): boolean {
   return getEnglishCurrencyDisplayName(upper) !== null;
 }
 
-/** All picker-ready currency codes from the curated fallback list, sorted A–Z. */
+/** All picker-ready currency codes from the curated fallback list, sorted A to Z. */
 export function getAllCurrencyCodes(): string[] {
   const unique = new Set<string>();
   for (const c of FALLBACK_CURRENCY_CODES) {
@@ -80,6 +80,36 @@ export function getAllCurrencyCodes(): string[] {
     }
   }
   return [...unique].sort((a, b) => a.localeCompare(b));
+}
+
+/** Put `preferred` first; keep relative order of the rest. */
+export function prioritizeCurrencyCode(codes: readonly string[], preferred: string): string[] {
+  const head = preferred.toUpperCase();
+  if (!head || !codes.includes(head)) {
+    return [...codes];
+  }
+  return [head, ...codes.filter((c) => c !== head)];
+}
+
+/** Quick FX chips on Split: locale/app currency always leads. Keep short for scanability. */
+const SPLIT_QUICK_CURRENCIES = [
+  "USD",
+  "EUR",
+  "GBP",
+  "DKK",
+  "SEK",
+  "NOK",
+  "CHF",
+  "JPY",
+] as const;
+
+export function getSplitQuickCurrencies(preferred: string): string[] {
+  const head = preferred.toUpperCase();
+  const base: string[] = [...SPLIT_QUICK_CURRENCIES];
+  if (/^[A-Z]{3}$/.test(head) && !base.includes(head)) {
+    return [head, ...base];
+  }
+  return prioritizeCurrencyCode(base, head);
 }
 
 export function getCurrencyFractionDigits(code: string): number {
@@ -298,7 +328,7 @@ export const CURRENCY_NAMES: Record<string, string> = {
   SGD: "Singapore Dollar",
   SHP: "Saint Helena Pound",
   SLE: "Sierra Leonean Leone",
-  SLL: "Sierra Leonean Leone (1964—2022)",
+  SLL: "Sierra Leonean Leone (1964: 2022)",
   SOS: "Somali Shilling",
   SRD: "Surinamese Dollar",
   SSP: "South Sudanese Pound",
@@ -334,7 +364,7 @@ export const CURRENCY_NAMES: Record<string, string> = {
   ZAR: "South African Rand",
   ZMW: "Zambian Kwacha",
   ZWG: "Zimbabwe Gold",
-  ZWL: "Zimbabwean Dollar (2009–2024)",
+  ZWL: "Zimbabwean Dollar (2009 to 2024)",
 };
 
 /** Full English name for the currency picker; never returns bare code when a name exists. */
@@ -371,7 +401,7 @@ export function getCurrencyListName(code: string, locale: SupportedLocale = "en"
   return currencyNameForSettingsList(upper);
 }
 
-/** Settings row label, e.g. `DKK — Danish Krone` (localized display name). */
+/** Settings row label, e.g. `DKK: Danish Krone` (localized display name). */
 export function getCurrencyListLabel(code: string, locale: SupportedLocale = "en"): string {
   const upper = code.toUpperCase();
   return `${upper} ${LIST_LABEL_EM_DASH} ${getCurrencyListName(code, locale)}`;

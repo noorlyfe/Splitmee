@@ -8,6 +8,11 @@ import type { ProjectWaitingEntry } from "../hooks/useProjects";
 import { useLocale } from "../hooks/useLocale";
 import { useTheme } from "../hooks/useTheme";
 import { formatCurrency } from "../lib/currency";
+import {
+  escalationHeaderKey,
+  escalationStampKey,
+  getEscalationVisual,
+} from "../lib/escalation";
 import { buildProjectReminderMessage } from "../lib/projectReminders";
 import { ReceiptCustomFooter } from "./ReceiptCustomFooter";
 import { resolveReceiptFooterText } from "../lib/receiptFooter";
@@ -23,41 +28,12 @@ export type ProjectOverdueReceiptCardProps = {
   isPro: boolean;
   hideReceiptBranding?: boolean;
   customFooter?: string;
+  paymentHint?: string;
   compact?: boolean;
 };
 
-const OVERDUE_RED = "#E5484D";
-
 function receiptColorsForTheme(isDark: boolean) {
   return getReceiptColors(isDark);
-}
-
-function PerforationEdge({ width, color, position }: { width: number; color: string; position: "top" | "bottom" }) {
-  const circles = Math.floor(width / 12);
-  return (
-    <View
-      style={{
-        flexDirection: "row",
-        justifyContent: "space-around",
-        paddingHorizontal: 6,
-        marginTop: position === "bottom" ? 12 : 0,
-        marginBottom: position === "top" ? 12 : 0,
-      }}
-    >
-      {Array.from({ length: circles }).map((_, i) => (
-        <View
-          key={i}
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: 3,
-            backgroundColor: color,
-            opacity: 0.4,
-          }}
-        />
-      ))}
-    </View>
-  );
 }
 
 export const ProjectOverdueReceiptCard = memo(function ProjectOverdueReceiptCard({
@@ -70,16 +46,20 @@ export const ProjectOverdueReceiptCard = memo(function ProjectOverdueReceiptCard
   isPro,
   hideReceiptBranding = false,
   customFooter = "",
+  paymentHint = "",
   compact = false,
 }: ProjectOverdueReceiptCardProps) {
   const { t, isRTL } = useLocale();
   const { isDark } = useTheme();
   const colors = useMemo(() => receiptColorsForTheme(isDark), [isDark]);
+  const visual = useMemo(() => getEscalationVisual(daysOverdue), [daysOverdue]);
+  const accent = visual.accent;
   const showBranding = !(isPro && hideReceiptBranding);
   const footerText = useMemo(
     () => resolveReceiptFooterText(isPro, customFooter),
     [customFooter, isPro]
   );
+  const displayHint = isPro && paymentHint.trim() ? paymentHint.trim() : "";
   const pack = useMemo(() => getLocalizedReceiptTonePack(nudgeTone, t), [nudgeTone, t]);
   const amountFormatted = formatCurrency(entry.amount, currencyCode);
   const projectTitle = entry.projectName.trim() || t("projectDefaultName");
@@ -111,28 +91,42 @@ export const ProjectOverdueReceiptCard = memo(function ProjectOverdueReceiptCard
         {
           width,
           backgroundColor: colors.background,
-          borderColor: colors.divider,
+          borderColor: visual.border,
+          borderWidth: visual.borderWidth,
         },
       ]}
     >
-      <PerforationEdge width={width} color={colors.muted} position="top" />
+      <View style={[styles.accentBar, { backgroundColor: colors.accent }]} />
       <View style={[styles.body, compact && styles.bodyCompact, { width }]}>
-        <View style={styles.watermarkLayer} pointerEvents="none">
-          <View style={styles.watermarkStamp}>
-            <Text style={styles.watermarkStampText}>{t("pastDue")}</Text>
+        <View style={[styles.watermarkLayer, { opacity: visual.watermarkOpacity }]} pointerEvents="none">
+          <View style={[styles.watermarkStamp, { borderColor: accent }]}>
+            <Text style={[styles.watermarkStampText, { color: accent }]}>{t("pastDue")}</Text>
           </View>
         </View>
 
         <View style={[styles.column, compact && styles.columnCompact]}>
-          <View style={styles.stamp}>
-            <Text style={styles.stampText}>{t("reminder2")}</Text>
+          <View
+            style={[
+              styles.stamp,
+              {
+                borderColor: accent,
+                backgroundColor: visual.accentSoft,
+                transform: [{ rotate: visual.stampRotate }],
+              },
+            ]}
+          >
+            <Text style={[styles.stampText, { color: accent }]}>
+              {t(escalationStampKey(visual.tier))}
+            </Text>
           </View>
 
-          <Text style={[styles.brand, { color: colors.text }]}>Nudgrr</Text>
+          <Text style={[styles.brand, { color: colors.accent }]}>{t("receiptBrandLabel")}</Text>
           <Text style={[styles.tagline, { color: colors.muted }]}>{pack.tagline}</Text>
           <Text style={[styles.date, { color: colors.muted }]}>{dateLabel}</Text>
 
-          <Text style={styles.secondNoticeLabel}>{t("secondNoticeHeader")}</Text>
+          <Text style={[styles.secondNoticeLabel, { color: accent }]}>
+            {t(escalationHeaderKey(visual.tier))}
+          </Text>
           <Text style={[styles.projectTitle, { color: colors.text }]} numberOfLines={3}>
             {projectTitle}
           </Text>
@@ -146,14 +140,14 @@ export const ProjectOverdueReceiptCard = memo(function ProjectOverdueReceiptCard
             </Text>
           </View>
 
-          <View style={[styles.dashedRule, { width: ruleWidth, borderColor: colors.divider }]} />
+          <View style={[styles.hairlineRule, { width: ruleWidth, backgroundColor: colors.divider }]} />
 
           <View style={[styles.amountBox, { borderColor: colors.divider, backgroundColor: colors.surface }]}>
             <Text style={[styles.amountLabel, { color: colors.muted }]}>{t("projectOverdueAmountLabel")}</Text>
             <View style={[styles.amountRow, rtlRow(isRTL)]}>
-              <Text style={styles.amountValue}>{amountFormatted}</Text>
-              <View style={styles.overduePill}>
-                <Text style={styles.overduePillText}>{overduePillLabel}</Text>
+              <Text style={[styles.amountValue, { color: accent }]}>{amountFormatted}</Text>
+              <View style={[styles.overduePill, { borderColor: accent, backgroundColor: visual.accentSoft }]}>
+                <Text style={[styles.overduePillText, { color: accent }]}>{overduePillLabel}</Text>
               </View>
             </View>
             <Text style={[styles.payeeLine, { color: colors.muted }]}>
@@ -161,13 +155,26 @@ export const ProjectOverdueReceiptCard = memo(function ProjectOverdueReceiptCard
             </Text>
           </View>
 
+          {displayHint ? (
+            <View
+              style={[
+                styles.hintBox,
+                { borderColor: visual.border, backgroundColor: visual.accentSoft },
+              ]}
+            >
+              <Text style={[styles.hintLabel, { color: accent }]}>{t("paymentHint")}</Text>
+              <Text style={[styles.hintBody, { color: colors.text }]} numberOfLines={4}>
+                {displayHint}
+              </Text>
+            </View>
+          ) : null}
+
           <ReceiptCustomFooter text={footerText} color={colors.muted} />
           {showBranding ? (
-            <Text style={[styles.madeWith, { color: colors.muted }]}>Made with Nudgrr</Text>
+            <Text style={[styles.madeWith, { color: colors.muted }]}>{t("madeWithNudgrr")}</Text>
           ) : null}
         </View>
       </View>
-      <PerforationEdge width={width} color={colors.muted} position="bottom" />
     </View>
   );
 });
@@ -176,19 +183,22 @@ const styles = StyleSheet.create({
   root: {
     alignSelf: "center",
     flexShrink: 0,
-    borderWidth: 0.5,
-    borderRadius: 4,
+    borderRadius: 22,
     overflow: "hidden",
     ...Platform.select({
       ios: {
-        shadowColor: "#000",
-        shadowOpacity: 0.08,
-        shadowRadius: 18,
-        shadowOffset: { width: 0, height: 10 },
+        shadowColor: "#12141A",
+        shadowOpacity: 0.14,
+        shadowRadius: 24,
+        shadowOffset: { width: 0, height: 14 },
       },
-      android: { elevation: 6 },
+      android: { elevation: 8 },
       default: {},
     }),
+  },
+  accentBar: {
+    height: 4,
+    width: "100%",
   },
   body: {
     position: "relative",
@@ -205,14 +215,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     zIndex: 0,
-    opacity: 0.08,
   },
   watermarkStamp: {
     width: 168,
     height: 168,
     borderRadius: 84,
     borderWidth: 2,
-    borderColor: OVERDUE_RED,
     alignItems: "center",
     justifyContent: "center",
     transform: [{ rotate: "15deg" }],
@@ -222,7 +230,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 13,
     letterSpacing: 1.6,
-    color: OVERDUE_RED,
     textTransform: "uppercase",
   },
   column: {
@@ -236,29 +243,28 @@ const styles = StyleSheet.create({
   },
   stamp: {
     borderWidth: 3,
-    borderColor: OVERDUE_RED,
     paddingHorizontal: 14,
     paddingVertical: 6,
-    transform: [{ rotate: "-4deg" }],
+    borderRadius: 4,
   },
   stampText: {
     fontFamily: fonts.mono,
     fontWeight: "700",
     fontSize: 11,
     letterSpacing: 2,
-    color: OVERDUE_RED,
     textTransform: "uppercase",
   },
   brand: {
-    fontFamily: fonts.mono,
-    fontSize: 22,
-    letterSpacing: 3,
+    fontFamily: fonts.bodySemiBold,
+    fontSize: 11,
+    letterSpacing: 2.6,
     marginTop: spacing.xs,
+    textTransform: "uppercase",
   },
   tagline: {
-    fontFamily: fonts.mono,
-    fontSize: 9,
-    letterSpacing: 1,
+    fontFamily: fonts.body,
+    fontSize: 12,
+    letterSpacing: 0.2,
     textAlign: "center",
   },
   date: {
@@ -271,7 +277,6 @@ const styles = StyleSheet.create({
     fontSize: 9,
     letterSpacing: 1.4,
     textTransform: "uppercase",
-    color: OVERDUE_RED,
     marginTop: spacing.sm,
   },
   projectTitle: {
@@ -299,9 +304,9 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     textAlign: "center",
   },
-  dashedRule: {
-    borderTopWidth: 1,
-    borderStyle: "dashed",
+  hairlineRule: {
+    alignSelf: "center",
+    height: StyleSheet.hairlineWidth,
     marginVertical: spacing.sm,
   },
   amountBox: {
@@ -327,11 +332,9 @@ const styles = StyleSheet.create({
     fontFamily: fonts.mono,
     fontSize: 22,
     fontWeight: "600",
-    color: OVERDUE_RED,
   },
   overduePill: {
     borderWidth: 1,
-    borderColor: OVERDUE_RED,
     borderRadius: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -339,12 +342,33 @@ const styles = StyleSheet.create({
   overduePillText: {
     fontFamily: fonts.mono,
     fontSize: 8,
-    color: OVERDUE_RED,
     textTransform: "uppercase",
   },
   payeeLine: {
     fontFamily: fonts.mono,
     fontSize: 10,
+    textAlign: "center",
+  },
+  hintBox: {
+    width: "100%",
+    borderWidth: 1.5,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 4,
+  },
+  hintLabel: {
+    fontFamily: fonts.mono,
+    fontWeight: "700",
+    fontSize: 9,
+    letterSpacing: 1.1,
+    textTransform: "uppercase",
+    textAlign: "center",
+  },
+  hintBody: {
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    lineHeight: 16,
     textAlign: "center",
   },
   madeWith: {

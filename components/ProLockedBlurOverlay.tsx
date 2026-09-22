@@ -1,5 +1,5 @@
 import { ReactNode, useMemo } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
 
@@ -12,7 +12,7 @@ type Props = {
   locked: boolean;
   unlockMessage: string;
   children: ReactNode;
-  style?: object;
+  style?: StyleProp<ViewStyle>;
 };
 
 export function ProLockedBlurOverlay({ locked, unlockMessage, children, style }: Props) {
@@ -23,7 +23,7 @@ export function ProLockedBlurOverlay({ locked, unlockMessage, children, style }:
   const { isDark } = useTheme();
 
   if (!locked) {
-    return <>{children}</>;
+    return <View style={style}>{children}</View>;
   }
 
   const openPaywall = () => {
@@ -32,7 +32,9 @@ export function ProLockedBlurOverlay({ locked, unlockMessage, children, style }:
 
   return (
     <View style={[styles.wrap, style]}>
-      <View pointerEvents="none">{children}</View>
+      <View pointerEvents="none" style={styles.content}>
+        {children}
+      </View>
       <View style={styles.overlay} pointerEvents="box-none">
         {Platform.OS !== "web" ? (
           <BlurView
@@ -62,13 +64,21 @@ export function ProLockedBlurOverlay({ locked, unlockMessage, children, style }:
 function createStyles(colors: AppColors) {
   return StyleSheet.create({
     wrap: {
+      position: "relative",
       overflow: "hidden",
-      borderRadius: radii.lg,
+      borderRadius: radii.xl,
+      minHeight: 168,
+    },
+    content: {
+      borderRadius: radii.xl,
+      overflow: "hidden",
     },
     overlay: {
       ...StyleSheet.absoluteFillObject,
       justifyContent: "center",
       alignItems: "center",
+      paddingVertical: spacing.lg,
+      paddingHorizontal: spacing.md,
     },
     dim: {
       ...StyleSheet.absoluteFillObject,
@@ -77,9 +87,11 @@ function createStyles(colors: AppColors) {
     prompt: {
       alignItems: "center",
       justifyContent: "center",
-      paddingHorizontal: spacing.lg,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
       gap: spacing.sm,
       maxWidth: 280,
+      width: "100%",
     },
     lockIcon: {
       fontSize: 28,

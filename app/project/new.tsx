@@ -11,14 +11,16 @@ import {
   View,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import * as Haptics from "expo-haptics";
+import * as Haptics from "../../lib/appHaptics";
 import { useRouter, type Href } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { CastPersonPicker } from "../../components/CastPersonPicker";
 import { ProGate } from "../../components/ProGate";
 import { fonts, radii, spacing, touchTarget, typography, type AppColors } from "../../constants/theme";
 import { useColors } from "../../hooks/useColors";
 import { useLocale } from "../../hooks/useLocale";
+import { personNamesMatch, type Person } from "../../hooks/usePeople";
 import { useProStatus } from "../../hooks/useProStatus";
 import { useProjects } from "../../hooks/useProjects";
 import { useTheme } from "../../hooks/useTheme";
@@ -53,6 +55,21 @@ export default function NewProjectScreen() {
 
   const addParticipant = useCallback(() => {
     setParticipants((prev) => [...prev, ""]);
+  }, []);
+
+  const pickCastPerson = useCallback((person: Person) => {
+    setParticipants((prev) => {
+      if (prev.some((name) => personNamesMatch(name, person.name))) {
+        return prev;
+      }
+      const emptyIndex = prev.findIndex((name) => !name.trim());
+      if (emptyIndex >= 0) {
+        const next = [...prev];
+        next[emptyIndex] = person.name;
+        return next;
+      }
+      return [...prev, person.name];
+    });
   }, []);
 
   const updateParticipant = useCallback((index: number, value: string) => {
@@ -152,6 +169,8 @@ export default function NewProjectScreen() {
               </Text>
             </View>
 
+            <CastPersonPicker excludeNames={participants} onPick={pickCastPerson} />
+
             {participants.map((value, index) => (
               <View key={index} style={[styles.participantRow, rtlRow(isRTL)]}>
                 <View style={styles.participantIndex}>
@@ -187,7 +206,7 @@ export default function NewProjectScreen() {
               accessibilityRole="button"
               accessibilityLabel={t("projectAddParticipant")}
             >
-              <Text style={styles.addLinkText}>+ {t("projectAddParticipant")}</Text>
+              <Text style={styles.addLinkText}>{t("projectAddParticipant")}</Text>
             </Pressable>
           </View>
 
@@ -276,7 +295,7 @@ function createStyles(colors: AppColors, isDark: boolean) {
     sectionCard: {
       borderRadius: radii.xl,
       borderWidth: 1.5,
-      borderColor: isDark ? colors.border : "rgba(237, 228, 216, 0.95)",
+      borderColor: colors.border,
       backgroundColor: colors.surface,
       padding: spacing.md,
       gap: spacing.sm,
@@ -293,7 +312,7 @@ function createStyles(colors: AppColors, isDark: boolean) {
       backgroundColor: colors.accentSoft,
       borderRadius: radii.pill,
       borderWidth: 1,
-      borderColor: isDark ? colors.border : "rgba(255, 184, 0, 0.25)",
+      borderColor: colors.border,
       paddingVertical: 5,
       paddingHorizontal: spacing.sm,
     },
@@ -312,7 +331,7 @@ function createStyles(colors: AppColors, isDark: boolean) {
       color: colors.textPrimary,
       borderWidth: 1,
       borderColor: colors.border,
-      backgroundColor: isDark ? colors.background : "#FFFDF8",
+      backgroundColor: isDark ? colors.background : colors.surface,
       borderRadius: radii.lg,
       paddingHorizontal: spacing.md,
       minHeight: touchTarget.inputHeight - 8,
@@ -328,7 +347,7 @@ function createStyles(colors: AppColors, isDark: boolean) {
       borderRadius: radii.pill,
       backgroundColor: colors.accentSoft,
       borderWidth: 1,
-      borderColor: isDark ? colors.border : "rgba(255, 184, 0, 0.3)",
+      borderColor: colors.border,
       alignItems: "center",
       justifyContent: "center",
     },
